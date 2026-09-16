@@ -17,6 +17,29 @@ const fmtDate = (iso) => {
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
 };
+function weekStart(iso) {
+  const d = new Date(`${iso}T00:00:00`);
+  const dia = d.getDay();
+  d.setDate(d.getDate() - (dia === 0 ? 6 : dia - 1));
+  return d.toISOString().slice(0, 10);
+}
+function vendasPorSemana(entregas, semanas = 6) {
+  const hoje = new Date();
+  const inicioAtual = new Date(weekStart(todayISO()));
+  const buckets = [];
+  for (let i = semanas - 1; i >= 0; i--) {
+    const d = new Date(inicioAtual);
+    d.setDate(d.getDate() - i * 7);
+    buckets.push({ semana: d.toISOString().slice(0, 10), valor: 0 });
+  }
+  const idx = new Map(buckets.map((b) => [b.semana, b]));
+  entregas.forEach((e) => {
+    if (!e.data) return;
+    const b = idx.get(weekStart(e.data));
+    if (b) b.valor += Number(e.qtdVendida || 0) * Number(e.preco || 0);
+  });
+  return buckets;
+}
 
 // ---------- persistence ----------
 // Fonte principal: Supabase (banco compartilhado — todo mundo que abre o app
@@ -202,20 +225,22 @@ const SEED_PROSPECTOS = [
 }));
 
 const PALETTE = {
-  bg: "#FBF6F2",
+  bg: "#F5F7FA",
   card: "#FFFFFF",
-  ink: "#2C2422",
-  inkSoft: "#7A6E68",
-  line: "#EDE2DA",
-  lineSoft: "#F1E6DE",
-  wine: "#8E2A4B",
-  wineSoft: "#F4E4EA",
-  gold: "#B98A3E",
-  goldSoft: "#F6ECD9",
-  ok: "#2F7A4D",
-  okSoft: "#E5F3EA",
-  pending: "#B4552F",
-  pendingSoft: "#FBEAE0",
+  ink: "#1C2126",
+  inkSoft: "#5B6472",
+  line: "#E4E8EE",
+  lineSoft: "#EAEEF3",
+  wine: "#2A78D6",
+  wineSoft: "#E3EEFC",
+  gold: "#EB6834",
+  goldSoft: "#FCE7DE",
+  ok: "#1BAF7A",
+  okSoft: "#DFF5EC",
+  pending: "#D03B3B",
+  pendingSoft: "#FBE4E4",
+  violet: "#4A3AA7",
+  violetSoft: "#EBE8F9",
 };
 
 export default function App() {
@@ -873,6 +898,83 @@ function KpiTile({ icon: Icon, tint, label, value }) {
   );
 }
 
+function SalesBarChart({ semanas }) {
+  const w = 300, h = 84, gap = 10;
+  const barW = (w - gap * (semanas.length - 1)) / semanas.length;
+  const max = Math.max(1, ...semanas.map((s) => s.valor));
+  const lastIdx = semanas.length - 1;
+  return (
+    <svg viewBox={`0 0 ${w} ${h + 16}`} width="100%" style={{ display: "block", overflow: "visible" }}>
+      <line x1={0} y1={h} x2={w} y2={h} stroke={PALETTE.line} strokeWidth={1} />
+      {semanas.map((s, i) => {
+        const barH = Math.max(2, (s.valor / max) * (h - 4));
+        const x = i * (barW + gap);
+        const active = i === lastIdx;
+        return (
+          <g key={s.semana}>
+            <rect
+              x={x} y={h - barH} width={barW} height={barH} rx={3}
+              fill={active ? PALETTE.gold : PALETTE.goldSoft}
+            />
+            {active && (
+              <text x={x + barW / 2} y={h - barH - 6} textAnchor="middle" fontSize="9" fontWeight="700" fill={PALETTE.ink}>
+                {brl(s.valor)}
+              </text>
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+function FunnelDonut({ items, total }) {
+  const size = 116, stroke = 16, r = (size - stroke) / 2, c = 2 * Math.PI * r;
+  let acc = 0;
+  const gap = total > 0 ? 3 : 0;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+      <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: "rotate(-90deg)" }}>
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={PALETTE.lineSoft} strokeWidth={stroke} />
+          {items.filter((it) => it.count > 0).map((it) => {
+            const len = Math.max(0, (it.count / total) * c - gap);
+            const dasharray = `${len} ${c - len}`;
+            const dashoffset = -acc;
+            acc += (it.count / total) * c;
+            return (
+              <circle
+                key={it.label} cx={size / 2} cy={size / 2} r={r} fill="none"
+                stroke={it.color} strokeWidth={stroke} strokeDasharray={dasharray}
+                strokeDashoffset={dashoffset} strokeLinecap="round"
+              />
+            );
+          })}
+        </svg>
+        <div style={{
+          position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center",
+        }}>
+          <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 24, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+            {total}
+          </div>
+          <div style={{ fontSize: 9.5, color: PALETTE.inkSoft }}>prospecções</div>
+        </div>
+      </div>
+      <div style={{ flex: 1, fontSize: 12, color: PALETTE.inkSoft, lineHeight: 1.5 }}>
+        {(() => {
+          const fechado = items.find((it) => it.label === "Fechado")?.count || 0;
+          const trabalhados = items.filter((it) => it.label !== "Não contatado").reduce((s, it) => s + it.count, 0);
+          const taxa = trabalhados > 0 ? Math.round((fechado / trabalhados) * 100) : null;
+          return taxa === null
+            ? "Ainda sem visitas registradas para calcular a conversão."
+            : <>Distribuição atual do funil — <strong style={{ color: PALETTE.ink }}>{taxa}%</strong> das visitas viram comércio fechado.</>;
+        })()}
+      </div>
+    </div>
+  );
+}
+
 // ---------------- Resumo ----------------
 function ResumoTab({ resumo, totalGeral }) {
   if (resumo.length === 0) {
@@ -897,7 +999,7 @@ function ResumoTab({ resumo, totalGeral }) {
           </div>
           <div>
             <div style={{ fontSize: 11, opacity: 0.85 }}>Pendente</div>
-            <div style={{ fontSize: 17, fontWeight: 700, color: "#FBEAE0" }}>{brl(totalGeral.pendente)}</div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: PALETTE.goldSoft }}>{brl(totalGeral.pendente)}</div>
           </div>
         </div>
       </Card>
@@ -958,6 +1060,7 @@ function PainelTab({ prospectos, comercios, resumo, totalGeral, entregas, metaVi
   const vendasMes = entregas
     .filter((e) => (e.data || "").startsWith(inicioMes))
     .reduce((s, e) => s + Number(e.qtdVendida || 0) * Number(e.preco || 0), 0);
+  const semanasVendas = useMemo(() => vendasPorSemana(entregas, 6), [entregas]);
 
   // ---- meta de comércios necessários, com base no giro real (não em potes/semana teóricos) ----
   const [metaLiquida, setMetaLiquidaState] = useState(() => loadLocal("metaLiquidaMensal", 10000));
@@ -1007,15 +1110,33 @@ function PainelTab({ prospectos, comercios, resumo, totalGeral, entregas, metaVi
             </div>
           </div>
           <div style={{ width: 44, height: 44, borderRadius: 12, background: "rgba(255,255,255,0.14)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <TrendingUp size={22} color="#F6ECD9" />
+            <TrendingUp size={22} color={PALETTE.goldSoft} />
           </div>
         </div>
+      </Card>
+
+      {/* vendas nas últimas semanas */}
+      <div style={{ fontWeight: 700, fontSize: 13, color: PALETTE.inkSoft, margin: "4px 0 8px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+        Vendas nas últimas semanas
+      </div>
+      <Card style={{ marginBottom: 16 }}>
+        <SalesBarChart semanas={semanasVendas} />
       </Card>
 
       {/* funil de prospecção */}
       <div style={{ fontWeight: 700, fontSize: 13, color: PALETTE.inkSoft, margin: "4px 0 8px", textTransform: "uppercase", letterSpacing: 0.5 }}>
         Funil de prospecção
       </div>
+      <Card style={{ marginBottom: 10 }}>
+        <FunnelDonut
+          total={prospectos.length}
+          items={PROSPECT_STATUS.map((s) => ({
+            label: s,
+            count: counts[s] || 0,
+            color: PALETTE[PROSPECT_STATUS_COLOR[s]] || PALETTE.inkSoft,
+          }))}
+        />
+      </Card>
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
         {PROSPECT_STATUS.map((s) => {
           const dotColor = PALETTE[PROSPECT_STATUS_COLOR[s]] || PALETTE.inkSoft;
