@@ -1,44 +1,49 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
-  Store, Package, BarChart3, Plus, Trash2, Check, Clock, X, Receipt, Share2, Download,
-  MessageCircle, LayoutDashboard, Target, MapPin, ArrowRight, Star, TrendingUp, Users,
-  Loader2, RefreshCw, Navigation, FileText, Instagram, Phone, Mail, ChevronRight,
-  AlertTriangle, Truck, Calendar, Edit3, Copy, Send,
+  Store, Package, BarChart3, Plus, Trash2, Check, Clock, X, Receipt, Share2, Download, MessageCircle,
+  LayoutDashboard, Target, Search, Phone, MapPin, ArrowRight, Star, TrendingUp, Users, Loader2, RefreshCw,
 } from "lucide-react";
 import html2canvas from "html2canvas";
 import { supabase, SUPABASE_CONFIGURED } from "./supabaseClient";
 
-// ─────────────────────────────────────────
-// HELPERS
-// ─────────────────────────────────────────
+// ---------- helpers ----------
 const uid = () => Math.random().toString(36).slice(2, 10);
-const brl = (n) => (Number(n) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const brl = (n) =>
+  (Number(n) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const fmtDate = (iso) => {
   if (!iso) return "";
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
 };
-const digits = (s) => (s || "").replace(/\D/g, "");
-const encMsg = (s) => encodeURIComponent(s);
 
+// ---------- persistence ----------
+// Fonte principal: Supabase (banco compartilhado — todo mundo que abre o app
+// vê os mesmos dados). Reserva: localStorage do navegador, usado se o
+// Supabase não estiver configurado ou o aparelho estiver offline.
 function loadLocal(key, fallback) {
-  try { const r = window.localStorage.getItem(key); return r ? JSON.parse(r) : fallback; }
-  catch { return fallback; }
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
 }
 function saveLocal(key, value) {
-  try { window.localStorage.setItem(key, JSON.stringify(value)); return true; }
-  catch { return false; }
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-// ─────────────────────────────────────────
-// SUPABASE HELPERS
-// ─────────────────────────────────────────
 async function fetchTable(table) {
   const { data, error } = await supabase.from(table).select("id, data");
   if (error) throw error;
   return data.map((row) => ({ ...row.data, id: row.id }));
 }
+
 async function syncTable(table, prevList, nextList) {
   const prevIds = prevList.map((x) => x.id);
   const nextIds = new Set(nextList.map((x) => x.id));
@@ -54,128 +59,19 @@ async function syncTable(table, prevList, nextList) {
   }
 }
 
-// ─────────────────────────────────────────
-// CONSTANTS
-// ─────────────────────────────────────────
-const PROSPECT_STATUS = ["Não contatado", "Contatado", "Visitado", "Fechado", "Recusou"];
 const STATUS_OPTIONS = ["Ativo", "Em negociação", "Inativo"];
-const TIPO_OPTIONS = ["Padaria", "Mercadinho", "Café", "Loja de conveniência", "Empório", "Outro"];
-
-const PROSPECT_STATUS_STYLE = {
-  "Não contatado": { bg: "#F0EDEB", color: "#7A6E68" },
-  "Contatado":     { bg: "#F6ECD9", color: "#B98A3E" },
-  "Visitado":      { bg: "#F4E4EA", color: "#8E2A4B" },
-  "Fechado":       { bg: "#E5F3EA", color: "#2F7A4D" },
-  "Recusou":       { bg: "#FBEAE0", color: "#B4552F" },
+const TIPO_OPTIONS = ["Padaria", "Mercadinho", "Café", "Loja de conveniência", "Outro"];
+const PROSPECT_STATUS = ["Não contatado", "Contatado", "Visitado", "Fechado", "Recusou"];
+const PROSPECT_STATUS_COLOR = {
+  "Não contatado": "inkSoft",
+  "Contatado": "gold",
+  "Visitado": "wine",
+  "Fechado": "ok",
+  "Recusou": "pending",
 };
 
-// ─────────────────────────────────────────
-// PALETTE
-// ─────────────────────────────────────────
-const P = {
-  bg:          "#FBF6F2",
-  card:        "#FFFFFF",
-  ink:         "#2C2422",
-  inkSoft:     "#7A6E68",
-  line:        "#EDE2DA",
-  wine:        "#8E2A4B",
-  wineSoft:    "#F4E4EA",
-  gold:        "#B98A3E",
-  goldSoft:    "#F6ECD9",
-  ok:          "#2F7A4D",
-  okSoft:      "#E5F3EA",
-  pending:     "#B4552F",
-  pendingSoft: "#FBEAE0",
-};
-
-// ─────────────────────────────────────────
-// TEMPLATES DE MENSAGEM
-// ─────────────────────────────────────────
-const TEMPLATES_DEFAULT = [
-  {
-    id: "t1", nome: "Apresentação inicial", canal: "whatsapp",
-    corpo: `Olá, {responsavel}! Tudo bem? 😊
-
-Sou da *Boom Algodão Doce* e gostaria de apresentar nosso produto para {nome}.
-
-Trabalhamos com algodão doce artesanal em potes, no modelo *consignação* — você só paga pelo que vender, sem risco de estoque!
-
-Posso passar aí para mostrar? Tem um minutinho essa semana?`,
-  },
-  {
-    id: "t2", nome: "Proposta de visita", canal: "whatsapp",
-    corpo: `Olá {responsavel}, bom dia! 👋
-
-Sou Bruno da *Boom Algodão Doce*. Vi que a {nome} tem um ótimo movimento e acredito que nosso algodão doce em pote seria muito bem recebido pelos seus clientes.
-
-A proposta é simples: deixamos os potes em consignação e só cobramos pelo que vender. Zero risco para você!
-
-Tem algum horário disponível para conversarmos rapidamente?`,
-  },
-  {
-    id: "t3", nome: "Follow-up pós-visita", canal: "whatsapp",
-    corpo: `Olá {responsavel}! Passando para dar um alô 😊
-
-Já faz alguns dias desde nossa conversa sobre o algodão doce em {nome}. Ficou alguma dúvida que posso esclarecer?
-
-Lembrando que é tudo em consignação — *sem risco*, só paga pelo que vender. Quando quiser avançar, é só me avisar! 🍭`,
-  },
-  {
-    id: "t4", nome: "Aviso de reposição", canal: "whatsapp",
-    corpo: `Olá {responsavel}! Tudo bem? 😊
-
-Estou passando para avisar que vou fazer uma visita em {nome} para *reabastecer o estoque* de algodão doce.
-
-Pretendo passar {data}. Confirma que está bom para você?`,
-  },
-  {
-    id: "t5", nome: "Apresentação por e-mail", canal: "email",
-    corpo: `Olá, {responsavel}!
-
-Meu nome é Bruno, sou responsável pela Boom Algodão Doce, empresa especializada em algodão doce artesanal em potes.
-
-Gostaria de apresentar uma oportunidade de parceria para {nome}: trabalhar com nosso produto no modelo de *consignação*, onde você disponibiliza espaço para os potes e só paga pelo que for vendido. Sem custo inicial, sem risco de estoque.
-
-Nosso algodão doce é produzido artesanalmente, com sabores variados, e tem excelente aceitação em padarias e mercados da região.
-
-Poderia agendar uma visita para apresentação e degustação? Estou à disposição para tirar dúvidas.
-
-Atenciosamente,
-Bruno
-Boom Algodão Doce
-(12) 99606-3582`,
-  },
-  {
-    id: "t6", nome: "Confirmação de parceria", canal: "whatsapp",
-    corpo: `Oi {responsavel}! 🎉
-
-Que ótima notícia ter você como parceiro! Ficamos muito felizes com a parceria com {nome}.
-
-Vou organizar a primeira entrega e já te aviso para acertarmos os detalhes. Qualquer dúvida, pode me chamar aqui mesmo.
-
-Seja bem-vindo à família Boom! 🍭`,
-  },
-  {
-    id: "t7", nome: "Estou chegando (roteiro)", canal: "whatsapp",
-    corpo: `Oi {responsavel}! 😊
-
-Passando pra avisar que hoje vou passar aí em {nome} para *reabastecer o algodão doce* e conferir as vendas.
-
-Chego por volta de {hora}. Pode me aguardar? 🍭`,
-  },
-  {
-    id: "t8", nome: "Agradecimento pós-venda", canal: "whatsapp",
-    corpo: `Olá {responsavel}! Obrigado pela parceria com {nome} 🙏
-
-Passando para agradecer a confiança! As vendas têm ido bem por aí?
-
-Qualquer coisa, pode me chamar. Até a próxima visita! 🍭`,
-  },
-];
-
-// ─────────────────────────────────────────
-// SEED DE PROSPECTOS (100+ estabelecimentos reais)
-// ─────────────────────────────────────────
+// Lista inicial de prospecção — levantamento de padarias/mercadinhos priorizando o litoral.
+// Carregada automaticamente na primeira vez que o app abre (sem prospectos salvos ainda).
 const SEED_PROSPECTOS = [
 ["Caraguatatuba","Litoral","Esquina do Pão","Padaria","Av. Piauí, 500 - Jardim Primavera","(12) 3882-3792",4.5],
 ["Caraguatatuba","Litoral","Padaria Pão Vitória","Padaria","R. Sebastião Mariano Nepomuceno, 340 - Centro","(12) 3881-1724",4.6],
@@ -184,7 +80,7 @@ const SEED_PROSPECTOS = [
 ["Caraguatatuba","Litoral","Padaria Pão D'Ouro","Padaria","Av. Guilherme de Almeida, 901 - Morro do Algodão","(12) 99160-5840",4.5],
 ["Caraguatatuba","Litoral","Padaria Bruno Confeiteiro","Padaria","Av. Domingos Martins Cabrera, 947 - Balneário dos Golfinhos","(12) 2103-9676",4.6],
 ["Caraguatatuba","Litoral","Padaria Lobo","Padaria","Av. Mal. Floriano Peixoto, 260 - Poiares","(12) 3888-1810",4.5],
-["Caraguatatuba","Litoral","Monalisas Padaria Empório e Restaurante","Padaria/Empório","Av. Geraldo Nogueira da Silva, 500 - Indaiá","(12) 98829-1139",3.3],
+["Caraguatatuba","Litoral","Monalisas Padaria, Empório e Restaurante","Padaria/Empório","Av. Geraldo Nogueira da Silva, 500 - Indaiá","(12) 98829-1139",3.3],
 ["Caraguatatuba","Litoral","Mercado Do Mauro","Mercadinho","R. Pedro Januário Leite - Jardim Olaria","",4.9],
 ["Caraguatatuba","Litoral","Mercado Beira Mar","Mercadinho","Av Maria de L da Silva K, 2525 - Massaguaçu","(12) 99797-4780",4.6],
 ["Caraguatatuba","Litoral","Mercadinho Sumaré","Mercadinho","Av. Siqueira Campos - Sumaré","(12) 3882-3188",4.3],
@@ -276,26 +172,60 @@ const SEED_PROSPECTOS = [
 ["Paraibuna","Interior","Mercado Nossa Senhora de Fátima","Mercadinho","R. Padre Américo, 239","(12) 99792-2661",4.4],
 ["Paraibuna","Interior","Mercadinho Gente Boa","Mercadinho","R. Cel. Nabor Nogueira Santos, 86","(12) 3974-3858",4.5],
 ["Paraibuna","Interior","Mercado Q Beleza","Mercadinho","Av. Carlos Guimarães, 240","",4.6],
+// --- Novos: comércios próximos (até 500m) de escolas de Caraguatatuba ---
+["Caraguatatuba","Litoral","Padaria Martim de Sá","Padaria","Martim de Sá","(12) 3883-5256",3.8],
+["Caraguatatuba","Litoral","Padaria Caraguatá","Padaria","R. Antônio Henrique de Mesquita, 80 - Jardim Casa Branca","(12) 98857-5883",4.9],
+["Caraguatatuba","Litoral","Laticínios Litoral Norte","Mercadinho","Av. Pres. Castelo Branco - Martim de Sá","(12) 3897-2717",4.2],
+["Caraguatatuba","Litoral","Padaria Shopping do Pão","Padaria","R. Benedita Mendes de Souza - Tingá","(12) 3881-4142",4.4],
+["Caraguatatuba","Litoral","Padaria Trigo Real","Padaria","Av. Rio Grande do Norte, 1200 - Indaiá","(12) 99138-5230",4.6],
+["Caraguatatuba","Litoral","Mercearia Beija Flor","Mercadinho","Av. Garça, 140 - Jardim Gaivotas","",4.5],
+["Caraguatatuba","Litoral","Bar e Mercearia do Toninho","Mercadinho","Avenida Cardeal, 442 - Jardim Gaivotas","(12) 3888-2470",4.3],
+["Caraguatatuba","Litoral","Supermercado Donato","Mercadinho","Av. Mal. Deodoro da Fonseca, 981 - Tingá","(12) 3883-7942",3.8],
+["Caraguatatuba","Litoral","Padaria Santo Pão","Padaria","R. João Marcello, 285 - Estrela D'Alva","(12) 3883-2329",4.5],
+["Caraguatatuba","Litoral","Esquina do Barranco","Padaria","Av. Cândida de Souza - Barranco Alto","(12) 99242-4141",4.3],
+["Caraguatatuba","Litoral","Padaria Tida","Padaria","Al. Maranhão, 589 - Porto Novo","(12) 99623-8308",3.8],
+["Caraguatatuba","Litoral","Casa dos Pães","Padaria","Rua Lagoinha, 12 - Travessão","(12) 99734-1920",4.7],
+["Caraguatatuba","Litoral","Bar e Mercearia Diniz","Mercadinho","Al. Antônio Luís G. Câmara Coutinho - Porto Novo","",4.3],
+["Caraguatatuba","Litoral","Supermercado Pereque","Mercadinho","Av. José Herculano, 270 - Travessão","(12) 99617-7231",4.3],
+["Caraguatatuba","Litoral","Mercadinho Esteve","Mercadinho","Av. José da Costa Pinheiro Júnior, 383 - Jaraguá","",4.2],
+["Caraguatatuba","Litoral","Padaria Vitória (Rio do Ouro)","Padaria","Rio do Ouro","",4.0],
+["Caraguatatuba","Litoral","Padaria Nova Massaguaçu","Padaria","R. Irma Lucília - Massaguaçu","(12) 3884-5472",4.3],
+["Caraguatatuba","Litoral","Confeitaria Mil Folhas","Padaria","R. Pesc. Manoel Marcondes Sodré, 29 - Massaguaçu","(12) 3884-8898",4.3],
+["Caraguatatuba","Litoral","Padaria Rocha","Padaria","R. Itália Baffi Magni - Massaguaçu","(12) 97410-6739",4.0],
+["Caraguatatuba","Litoral","Padaria do Carmo","Padaria","Av. Arthur Costa Filho, 1821 - Centro","(12) 98274-3333",4.2],
+["Caraguatatuba","Litoral","ONO - Peixaria e Produtos Orientais","Mercadinho","Av. Dr. Arthur da Costa Filho, 1999 - Sumaré","(12) 3881-1181",4.6],
+["Caraguatatuba","Litoral","Supermarket Canto Bravo","Mercadinho","R. Professora Adali Coelho Passos, 690 - Prainha","(12) 3882-5265",4.2],
 ].map(([cidade, prioridade, nome, tipo, endereco, contato, avaliacao]) => ({
   id: uid(), cidade, prioridade, nome, tipo, endereco, contato, avaliacao,
-  status: "Não contatado", dataUltimoContato: "", obs: "", instagram: "", comercioId: null,
+  status: "Não contatado", dataUltimoContato: "", motivo: "", obs: "", comercioId: null,
 }));
 
-// ─────────────────────────────────────────
-// APP ROOT
-// ─────────────────────────────────────────
+const PALETTE = {
+  bg: "#FBF6F2",
+  card: "#FFFFFF",
+  ink: "#2C2422",
+  inkSoft: "#7A6E68",
+  line: "#EDE2DA",
+  wine: "#8E2A4B",
+  wineSoft: "#F4E4EA",
+  gold: "#B98A3E",
+  goldSoft: "#F6ECD9",
+  ok: "#2F7A4D",
+  okSoft: "#E5F3EA",
+  pending: "#B4552F",
+  pendingSoft: "#FBEAE0",
+};
+
 export default function App() {
-  const [loaded, setLoaded]       = useState(false);
-  const [offline, setOffline]     = useState(false);
-  const [saveError, setSaveError] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [offline, setOffline] = useState(false);
   const [comercios, setComercios] = useState([]);
-  const [entregas, setEntregas]   = useState([]);
+  const [entregas, setEntregas] = useState([]);
   const [prospectos, setProspectos] = useState([]);
   const [metaVisitas, setMetaVisitas] = useState(5);
-  const [templates, setTemplates] = useState(TEMPLATES_DEFAULT);
   const [tab, setTab] = useState("painel");
+  const [saveError, setSaveError] = useState("");
 
-  // ---- load ----
   useEffect(() => {
     (async () => {
       if (!SUPABASE_CONFIGURED) {
@@ -303,39 +233,33 @@ export default function App() {
         setComercios(loadLocal("comercios", []));
         setEntregas(loadLocal("entregas", []));
         setProspectos(loadLocal("prospectos", SEED_PROSPECTOS));
-        setMetaVisitas(loadLocal("metaVisitas", 5));
-        setTemplates(loadLocal("templates", TEMPLATES_DEFAULT));
+        setMetaVisitas(loadLocal("metaVisitasSemanais", 5));
         setLoaded(true);
         return;
       }
       try {
-        const [c, e, p] = await Promise.all([
-          fetchTable("comercios"), fetchTable("entregas"), fetchTable("prospectos"),
-        ]);
-        const { data: mvRow }  = await supabase.from("settings").select("value").eq("key", "metaVisitas").maybeSingle();
-        const { data: tplRow } = await supabase.from("settings").select("value").eq("key", "templates").maybeSingle();
+        const [c, e, p] = await Promise.all([fetchTable("comercios"), fetchTable("entregas"), fetchTable("prospectos")]);
+        const { data: settingsRow } = await supabase.from("settings").select("value").eq("key", "metaVisitas").maybeSingle();
         setComercios(c);
         setEntregas(e);
         if (p.length > 0) {
           setProspectos(p);
         } else {
+          // primeiro uso: semeia a lista inicial de prospecção no banco
           await syncTable("prospectos", [], SEED_PROSPECTOS);
           setProspectos(SEED_PROSPECTOS);
         }
-        setMetaVisitas(mvRow?.value ?? 5);
-        setTemplates(tplRow?.value ?? TEMPLATES_DEFAULT);
+        setMetaVisitas(settingsRow?.value ?? 5);
         saveLocal("comercios", c);
         saveLocal("entregas", e);
         saveLocal("prospectos", p.length > 0 ? p : SEED_PROSPECTOS);
-        saveLocal("metaVisitas", mvRow?.value ?? 5);
-        saveLocal("templates", tplRow?.value ?? TEMPLATES_DEFAULT);
+        saveLocal("metaVisitasSemanais", settingsRow?.value ?? 5);
       } catch {
         setOffline(true);
         setComercios(loadLocal("comercios", []));
         setEntregas(loadLocal("entregas", []));
         setProspectos(loadLocal("prospectos", SEED_PROSPECTOS));
-        setMetaVisitas(loadLocal("metaVisitas", 5));
-        setTemplates(loadLocal("templates", TEMPLATES_DEFAULT));
+        setMetaVisitas(loadLocal("metaVisitasSemanais", 5));
       } finally {
         setLoaded(true);
       }
@@ -346,171 +270,242 @@ export default function App() {
     if (!SUPABASE_CONFIGURED) return;
     setLoaded(false);
     try {
-      const [c, e, p] = await Promise.all([
-        fetchTable("comercios"), fetchTable("entregas"), fetchTable("prospectos"),
-      ]);
-      const { data: mvRow } = await supabase.from("settings").select("value").eq("key", "metaVisitas").maybeSingle();
-      setComercios(c); setEntregas(e); setProspectos(p);
-      setMetaVisitas(mvRow?.value ?? 5);
-      setOffline(false); setSaveError("");
+      const [c, e, p] = await Promise.all([fetchTable("comercios"), fetchTable("entregas"), fetchTable("prospectos")]);
+      const { data: settingsRow } = await supabase.from("settings").select("value").eq("key", "metaVisitas").maybeSingle();
+      setComercios(c);
+      setEntregas(e);
+      setProspectos(p);
+      setMetaVisitas(settingsRow?.value ?? 5);
+      setOffline(false);
+      setSaveError("");
     } catch {
-      setSaveError("Falha ao atualizar do servidor. Verifique sua internet.");
+      setSaveError("Não foi possível atualizar do servidor agora. Verifique sua internet.");
     } finally {
       setLoaded(true);
     }
   }
 
-  // ---- sync helpers ----
-  async function upComercios(next) {
-    setComercios(next); saveLocal("comercios", next);
+  async function updateComercios(next) {
+    const prev = comercios;
+    setComercios(next);
+    saveLocal("comercios", next);
     if (!SUPABASE_CONFIGURED) return;
-    try { await syncTable("comercios", comercios, next); setSaveError(""); }
-    catch { setSaveError("Dados salvos neste aparelho — sync falhou, tente novamente."); }
+    try {
+      await syncTable("comercios", prev, next);
+      setSaveError("");
+    } catch {
+      setSaveError("Não sincronizou com o servidor — os dados continuam salvos neste aparelho, tente novamente com internet.");
+    }
   }
-  async function upEntregas(next) {
-    setEntregas(next); saveLocal("entregas", next);
+  async function updateEntregas(next) {
+    const prev = entregas;
+    setEntregas(next);
+    saveLocal("entregas", next);
     if (!SUPABASE_CONFIGURED) return;
-    try { await syncTable("entregas", entregas, next); setSaveError(""); }
-    catch { setSaveError("Dados salvos neste aparelho — sync falhou, tente novamente."); }
+    try {
+      await syncTable("entregas", prev, next);
+      setSaveError("");
+    } catch {
+      setSaveError("Não sincronizou com o servidor — os dados continuam salvos neste aparelho, tente novamente com internet.");
+    }
   }
-  async function upProspectos(next) {
-    setProspectos(next); saveLocal("prospectos", next);
+  async function updateProspectos(next) {
+    const prev = prospectos;
+    setProspectos(next);
+    saveLocal("prospectos", next);
     if (!SUPABASE_CONFIGURED) return;
-    try { await syncTable("prospectos", prospectos, next); setSaveError(""); }
-    catch { setSaveError("Dados salvos neste aparelho — sync falhou, tente novamente."); }
+    try {
+      await syncTable("prospectos", prev, next);
+      setSaveError("");
+    } catch {
+      setSaveError("Não sincronizou com o servidor — os dados continuam salvos neste aparelho, tente novamente com internet.");
+    }
   }
-  async function upMetaVisitas(next) {
-    setMetaVisitas(next); saveLocal("metaVisitas", next);
+  async function updateMetaVisitas(next) {
+    setMetaVisitas(next);
+    saveLocal("metaVisitasSemanais", next);
     if (!SUPABASE_CONFIGURED) return;
-    try { await supabase.from("settings").upsert({ key: "metaVisitas", value: next }); }
-    catch { /* silencioso */ }
-  }
-  async function upTemplates(next) {
-    setTemplates(next); saveLocal("templates", next);
-    if (!SUPABASE_CONFIGURED) return;
-    try { await supabase.from("settings").upsert({ key: "templates", value: next }); }
-    catch { /* silencioso */ }
+    try {
+      await supabase.from("settings").upsert({ key: "metaVisitas", value: next });
+    } catch {
+      /* silencioso — não é crítico */
+    }
   }
 
-  // ---- derived ----
-  const resumo = useMemo(() => comercios.map((c) => {
-    const lista = entregas.filter((e) => e.comercioId === c.id).sort((a, b) => a.data > b.data ? 1 : -1);
-    const totalEntregue = lista.reduce((s, e) => s + Number(e.qtdReposta || 0), 0);
-    const totalVendido  = lista.reduce((s, e) => s + Number(e.qtdVendida || 0), 0);
-    const valorVendido  = lista.reduce((s, e) => s + Number(e.qtdVendida || 0) * Number(e.preco || 0), 0);
-    const comissaoPct   = Number(c.comissaoPct || 0) / 100;
-    const valorComissao = valorVendido * comissaoPct;
-    const aReceber      = valorVendido - valorComissao;
-    const pendente      = lista.filter((e) => e.status !== "Pago")
-      .reduce((s, e) => s + Number(e.qtdVendida || 0) * Number(e.preco || 0) * (1 - comissaoPct), 0);
-    const last = lista[lista.length - 1];
-    const estoqueAtual  = last
-      ? Number(last.estoqueAnterior || 0) + Number(last.qtdReposta || 0) - Number(last.qtdVendida || 0) - Number(last.qtdRecolhida || 0)
-      : 0;
-    return { ...c, totalEntregue, totalVendido, valorVendido, valorComissao, aReceber, pendente, estoqueAtual, visitas: lista.length };
-  }), [comercios, entregas]);
+  // ---------- derived ----------
+  const resumo = useMemo(() => {
+    return comercios.map((c) => {
+      const lista = entregas
+        .filter((e) => e.comercioId === c.id)
+        .sort((a, b) => (a.data > b.data ? 1 : -1));
+      const totalEntregue = lista.reduce((s, e) => s + Number(e.qtdReposta || 0), 0);
+      const totalVendido = lista.reduce((s, e) => s + Number(e.qtdVendida || 0), 0);
+      const valorVendido = lista.reduce((s, e) => s + Number(e.qtdVendida || 0) * Number(e.preco || 0), 0);
+      const comissaoPct = Number(c.comissaoPct || 0) / 100;
+      const valorComissao = valorVendido * comissaoPct;
+      const aReceber = valorVendido - valorComissao;
+      const pendente = lista
+        .filter((e) => e.status !== "Pago")
+        .reduce((s, e) => s + Number(e.qtdVendida || 0) * Number(e.preco || 0) * (1 - comissaoPct), 0);
+      const estoqueAtual = lista.length
+        ? Number(lista[lista.length - 1].estoqueAnterior || 0) +
+          Number(lista[lista.length - 1].qtdReposta || 0) -
+          Number(lista[lista.length - 1].qtdVendida || 0) -
+          Number(lista[lista.length - 1].qtdRecolhida || 0)
+        : 0;
+      return { ...c, totalEntregue, totalVendido, valorVendido, valorComissao, aReceber, pendente, estoqueAtual, visitas: lista.length };
+    });
+  }, [comercios, entregas]);
 
-  const totalGeral = useMemo(() => resumo.reduce(
-    (a, r) => ({ valorVendido: a.valorVendido + r.valorVendido, aReceber: a.aReceber + r.aReceber, pendente: a.pendente + r.pendente }),
-    { valorVendido: 0, aReceber: 0, pendente: 0 }
-  ), [resumo]);
+  const totalGeral = useMemo(
+    () => resumo.reduce((acc, r) => ({
+      valorVendido: acc.valorVendido + r.valorVendido,
+      aReceber: acc.aReceber + r.aReceber,
+      pendente: acc.pendente + r.pendente,
+    }), { valorVendido: 0, aReceber: 0, pendente: 0 }),
+    [resumo]
+  );
 
   function lastEstoqueRestante(comercioId) {
-    const lista = entregas.filter((e) => e.comercioId === comercioId).sort((a, b) => a.data > b.data ? 1 : -1);
+    const lista = entregas
+      .filter((e) => e.comercioId === comercioId)
+      .sort((a, b) => (a.data > b.data ? 1 : -1));
     if (!lista.length) return 0;
     const last = lista[lista.length - 1];
     return Number(last.estoqueAnterior || 0) + Number(last.qtdReposta || 0) - Number(last.qtdVendida || 0) - Number(last.qtdRecolhida || 0);
   }
 
   function criarComercioDeProspecto(prospecto) {
-    const novo = {
-      id: uid(), nome: prospecto.nome, tipo: prospecto.tipo?.split("/")[0] || "Outro",
-      endereco: prospecto.endereco, contato: prospecto.contato, responsavel: "",
-      comissaoPct: 28, status: "Ativo",
+    const novoComercio = {
+      id: uid(),
+      nome: prospecto.nome,
+      tipo: prospecto.tipo?.split("/")[0] || "Outro",
+      endereco: prospecto.endereco,
+      contato: prospecto.contato,
+      responsavel: "",
+      comissaoPct: 28,
+      status: "Ativo",
     };
-    upComercios([...comercios, novo]);
-    upProspectos(prospectos.map((p) => p.id === prospecto.id ? { ...p, comercioId: novo.id } : p));
+    updateComercios([...comercios, novoComercio]);
+    updateProspectos(prospectos.map((p) => (p.id === prospecto.id ? { ...p, comercioId: novoComercio.id } : p)));
     setTab("comercios");
   }
 
-  const tabs = [
-    { id: "painel",     label: "Painel",       icon: LayoutDashboard },
-    { id: "prospeccao", label: "Prospecção",   icon: Target },
-    { id: "comercios",  label: "Comércios",    icon: Store },
-    { id: "entregas",   label: "Lançamentos",  icon: Package },
-    { id: "roteiro",    label: "Roteiro",      icon: Navigation },
-    { id: "templates",  label: "Templates",    icon: FileText },
-    { id: "resumo",     label: "Resumo",       icon: BarChart3 },
-  ];
-
-  const sharedProps = { comercios, entregas, prospectos, resumo, totalGeral, templates };
-
   return (
-    <div style={{ minHeight: "100vh", background: P.bg, fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif", color: P.ink, paddingBottom: 88 }}>
+    <div style={{ minHeight: "100vh", background: PALETTE.bg, fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif", color: PALETTE.ink, paddingBottom: 90 }}>
       <Header offline={offline} onRefresh={recarregar} configured={SUPABASE_CONFIGURED} />
-      {!loaded && <SpinCenter />}
+      {!loaded && (
+        <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
+          <Loader2 className="spin-central" size={26} color={PALETTE.wine} />
+          <style>{`.spin-central{animation:spin-central 1s linear infinite}@keyframes spin-central{to{transform:rotate(360deg)}}`}</style>
+        </div>
+      )}
       {loaded && saveError && (
-        <div style={{ margin: "0 16px 12px", padding: "10px 14px", background: P.pendingSoft, color: P.pending, borderRadius: 10, fontSize: 13 }}>
+        <div style={{ margin: "0 16px 12px", padding: "10px 14px", background: PALETTE.pendingSoft, color: PALETTE.pending, borderRadius: 10, fontSize: 13 }}>
           {saveError}
         </div>
       )}
       {loaded && (
-        <div style={{ maxWidth: 720, margin: "0 auto", padding: "0 16px" }}>
-          {tab === "painel"     && <PainelTab {...sharedProps} metaVisitas={metaVisitas} setMetaVisitas={upMetaVisitas} goTo={setTab} />}
-          {tab === "prospeccao" && <ProspeccaoTab prospectos={prospectos} setProspectos={upProspectos} templates={templates} onCriarComercio={criarComercioDeProspecto} />}
-          {tab === "comercios"  && <ComerciosTab comercios={comercios} setComercios={upComercios} entregasCount={(id) => entregas.filter((e) => e.comercioId === id).length} />}
-          {tab === "entregas"   && <EntregasTab comercios={comercios} entregas={entregas} setEntregas={upEntregas} lastEstoqueRestante={lastEstoqueRestante} />}
-          {tab === "roteiro"    && <RoteiroTab comercios={comercios} entregas={entregas} />}
-          {tab === "templates"  && <TemplatesTab templates={templates} setTemplates={upTemplates} />}
-          {tab === "resumo"     && <ResumoTab resumo={resumo} totalGeral={totalGeral} />}
-        </div>
+      <div style={{ maxWidth: 720, margin: "0 auto", padding: "0 16px" }}>
+        {tab === "painel" && (
+          <PainelTab
+            prospectos={prospectos}
+            comercios={comercios}
+            resumo={resumo}
+            totalGeral={totalGeral}
+            entregas={entregas}
+            metaVisitas={metaVisitas}
+            setMetaVisitas={updateMetaVisitas}
+            goTo={setTab}
+          />
+        )}
+        {tab === "prospeccao" && (
+          <ProspeccaoTab
+            prospectos={prospectos}
+            setProspectos={updateProspectos}
+            onCriarComercio={criarComercioDeProspecto}
+          />
+        )}
+        {tab === "comercios" && (
+          <ComerciosTab comercios={comercios} setComercios={updateComercios} entregasCount={(id) => entregas.filter((e) => e.comercioId === id).length} />
+        )}
+        {tab === "entregas" && (
+          <EntregasTab
+            comercios={comercios}
+            entregas={entregas}
+            setEntregas={updateEntregas}
+            lastEstoqueRestante={lastEstoqueRestante}
+          />
+        )}
+        {tab === "resumo" && <ResumoTab resumo={resumo} totalGeral={totalGeral} />}
+      </div>
       )}
-      <TabBar tab={tab} setTab={setTab} items={tabs} />
+      <TabBar tab={tab} setTab={setTab} />
     </div>
   );
 }
 
-// ─────────────────────────────────────────
-// HEADER
-// ─────────────────────────────────────────
 function Header({ offline, onRefresh, configured }) {
   return (
-    <div style={{ padding: "20px 16px 12px", textAlign: "center", position: "relative" }}>
-      <div style={{ fontSize: 11, letterSpacing: 1.8, textTransform: "uppercase", color: P.gold, fontWeight: 700 }}>
+    <div style={{ padding: "22px 16px 14px", textAlign: "center", position: "relative" }}>
+      <div style={{ fontSize: 12, letterSpacing: 1.5, textTransform: "uppercase", color: PALETTE.gold, fontWeight: 700 }}>
         Boom Algodão Doce
       </div>
-      <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 24, fontWeight: 700, color: P.wine, marginTop: 2 }}>
+      <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 26, fontWeight: 700, color: PALETTE.wine, marginTop: 2 }}>
         Central de Gestão
       </div>
       {configured && (
-        <button onClick={onRefresh} title="Atualizar" style={{ position: "absolute", top: 20, right: 16, background: "transparent", border: "none", cursor: "pointer", color: P.inkSoft }}>
+        <button
+          onClick={onRefresh}
+          title="Atualizar dados do servidor"
+          style={{
+            position: "absolute", top: 20, right: 16, background: "transparent", border: "none",
+            cursor: "pointer", color: PALETTE.inkSoft, display: "flex", alignItems: "center", gap: 4,
+          }}
+        >
           <RefreshCw size={16} />
         </button>
       )}
       <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 5, marginTop: 6 }}>
-        <span style={{ width: 7, height: 7, borderRadius: 999, background: offline ? P.pending : P.ok, display: "inline-block" }} />
-        <span style={{ fontSize: 10.5, color: P.inkSoft }}>
-          {!configured ? "Somente neste aparelho" : offline ? "Offline — dados locais" : "Sincronizado"}
+        <span style={{ width: 7, height: 7, borderRadius: 999, background: offline ? PALETTE.pending : PALETTE.ok, display: "inline-block" }} />
+        <span style={{ fontSize: 10.5, color: PALETTE.inkSoft }}>
+          {!configured ? "Somente neste aparelho (banco não configurado)" : offline ? "Sem conexão — usando dados salvos neste aparelho" : "Sincronizado"}
         </span>
       </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────
-// TAB BAR (scrollable)
-// ─────────────────────────────────────────
-function TabBar({ tab, setTab, items }) {
+function TabBar({ tab, setTab }) {
+  const items = [
+    { id: "painel", label: "Painel", icon: LayoutDashboard },
+    { id: "prospeccao", label: "Prospecção", icon: Target },
+    { id: "comercios", label: "Comércios", icon: Store },
+    { id: "entregas", label: "Lançamentos", icon: Package },
+    { id: "resumo", label: "Resumo", icon: BarChart3 },
+  ];
   return (
-    <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: P.card, borderTop: `1px solid ${P.line}`, boxShadow: "0 -4px 16px rgba(0,0,0,0.05)" }}>
-      <div style={{ maxWidth: 720, margin: "0 auto", display: "flex", overflowX: "auto", scrollbarWidth: "none" }}>
+    <div style={{
+      position: "fixed", bottom: 0, left: 0, right: 0, background: PALETTE.card,
+      borderTop: `1px solid ${PALETTE.line}`, display: "flex", justifyContent: "center",
+      boxShadow: "0 -4px 16px rgba(0,0,0,0.04)",
+    }}>
+      <div style={{ display: "flex", width: "100%", maxWidth: 720 }}>
         {items.map((it) => {
           const Icon = it.icon;
           const active = tab === it.id;
           return (
-            <button key={it.id} onClick={() => setTab(it.id)} style={{ flex: "0 0 auto", minWidth: 64, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "10px 10px 12px", background: "transparent", border: "none", cursor: "pointer", color: active ? P.wine : P.inkSoft }}>
-              <Icon size={17} strokeWidth={active ? 2.5 : 2} />
-              <span style={{ fontSize: 9, fontWeight: active ? 700 : 500, whiteSpace: "nowrap" }}>{it.label}</span>
+            <button
+              key={it.id}
+              onClick={() => setTab(it.id)}
+              style={{
+                flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+                padding: "10px 0 12px", background: "transparent", border: "none", cursor: "pointer",
+                color: active ? PALETTE.wine : PALETTE.inkSoft,
+              }}
+            >
+              <Icon size={18} strokeWidth={active ? 2.4 : 2} />
+              <span style={{ fontSize: 9.5, fontWeight: active ? 700 : 500 }}>{it.label}</span>
             </button>
           );
         })}
@@ -519,526 +514,244 @@ function TabBar({ tab, setTab, items }) {
   );
 }
 
-// ─────────────────────────────────────────
-// BASE COMPONENTS
-// ─────────────────────────────────────────
 function Card({ children, style }) {
-  return <div style={{ background: P.card, borderRadius: 14, border: `1px solid ${P.line}`, padding: 16, ...style }}>{children}</div>;
+  return (
+    <div style={{ background: PALETTE.card, borderRadius: 14, border: `1px solid ${PALETTE.line}`, padding: 16, ...style }}>
+      {children}
+    </div>
+  );
 }
+
 function Field({ label, children }) {
   return (
     <label style={{ display: "block", marginBottom: 10 }}>
-      <div style={{ fontSize: 12, color: P.inkSoft, marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 12, color: PALETTE.inkSoft, marginBottom: 4 }}>{label}</div>
       {children}
     </label>
   );
 }
-const iStyle = { width: "100%", padding: "9px 10px", borderRadius: 9, border: `1px solid ${P.line}`, fontSize: 14, background: "#FDFAF8", color: P.ink, boxSizing: "border-box" };
+
+const inputStyle = {
+  width: "100%", padding: "9px 10px", borderRadius: 9, border: `1px solid ${PALETTE.line}`,
+  fontSize: 14, background: "#FDFAF8", color: PALETTE.ink, boxSizing: "border-box",
+};
 
 function Btn({ children, onClick, variant = "primary", style, type = "button" }) {
-  const v = {
-    primary: { background: P.wine, color: "#fff", border: "none" },
-    ghost:   { background: "transparent", color: P.wine, border: `1px solid ${P.wine}` },
-    subtle:  { background: P.wineSoft, color: P.wine, border: "none" },
-    green:   { background: P.ok, color: "#fff", border: "none" },
-    gold:    { background: P.goldSoft, color: P.gold, border: "none" },
+  const variants = {
+    primary: { background: PALETTE.wine, color: "#fff" },
+    ghost: { background: "transparent", color: PALETTE.wine, border: `1px solid ${PALETTE.wine}` },
+    subtle: { background: PALETTE.wineSoft, color: PALETTE.wine },
   };
   return (
-    <button type={type} onClick={onClick} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 14px", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer", ...v[variant], ...style }}>
+    <button
+      type={type}
+      onClick={onClick}
+      style={{
+        display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+        padding: "9px 14px", borderRadius: 10, border: "none", fontSize: 13.5, fontWeight: 600,
+        cursor: "pointer", ...variants[variant], ...style,
+      }}
+    >
       {children}
     </button>
   );
 }
 
-function Metric({ label, value, sub }) {
-  return (
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <div style={{ fontSize: 10.5, color: P.inkSoft, marginBottom: 2 }}>{label}</div>
-      <div style={{ fontSize: 20, fontWeight: 800, color: P.wine, lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 10.5, color: P.inkSoft, marginTop: 2 }}>{sub}</div>}
-    </div>
-  );
-}
-
-function StatusBadge({ status }) {
-  const s = PROSPECT_STATUS_STYLE[status] || { bg: P.line, color: P.inkSoft };
-  return <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: s.bg, color: s.color, whiteSpace: "nowrap" }}>{status}</span>;
-}
-
-function SpinCenter() {
-  return (
-    <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
-      <Loader2 size={26} color={P.wine} style={{ animation: "spin 1s linear infinite" }} />
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </div>
-  );
-}
-
-function Modal({ children, onClose, title }) {
-  return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(44,36,34,0.45)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 50 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: P.card, width: "100%", maxWidth: 720, borderRadius: "18px 18px 0 0", padding: 20, maxHeight: "88vh", overflowY: "auto", boxShadow: "0 -8px 30px rgba(0,0,0,0.15)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <div style={{ fontWeight: 700, fontSize: 16, color: P.wine }}>{title}</div>
-          <button onClick={onClose} style={{ background: "transparent", border: "none", cursor: "pointer", color: P.inkSoft }}><X size={20} /></button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────
-// PAINEL TAB
-// ─────────────────────────────────────────
-function PainelTab({ prospectos, resumo, totalGeral, entregas, metaVisitas, setMetaVisitas, goTo }) {
-  const hoje = todayISO();
-  const semanaInicio = (() => {
-    const d = new Date(); d.setDate(d.getDate() - d.getDay()); return d.toISOString().slice(0, 10);
-  })();
-
-  const visitasSemana = entregas.filter((e) => e.data >= semanaInicio && e.data <= hoje).length;
-  const metaPct = Math.min(100, Math.round((visitasSemana / Math.max(1, metaVisitas)) * 100));
-
-  const contatados = prospectos.filter((p) => p.status === "Contatado").length;
-  const fechados   = prospectos.filter((p) => p.status === "Fechado").length;
-  const ativos     = resumo.filter((r) => r.status === "Ativo").length;
-
-  // mini bar chart — top 5 comércios por valor vendido
-  const top5 = [...resumo].sort((a, b) => b.valorVendido - a.valorVendido).slice(0, 5);
-  const maxVal = top5[0]?.valorVendido || 1;
-
-  return (
-    <div style={{ paddingTop: 8 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
-        <Card><Metric label="A receber (total)" value={brl(totalGeral.aReceber)} sub={`${brl(totalGeral.pendente)} pendente`} /></Card>
-        <Card><Metric label="Valor vendido" value={brl(totalGeral.valorVendido)} /></Card>
-        <Card><Metric label="Pontos ativos" value={ativos} sub={`de ${resumo.length} comércio(s)`} /></Card>
-        <Card><Metric label="Prospectos" value={`${contatados} / ${prospectos.length}`} sub={`${fechados} fechado(s)`} /></Card>
-      </div>
-
-      {/* Meta de visitas */}
-      <Card style={{ marginBottom: 12 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-          <div style={{ fontWeight: 700, fontSize: 13.5 }}>Meta de visitas esta semana</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <button onClick={() => setMetaVisitas(Math.max(1, metaVisitas - 1))} style={{ width: 22, height: 22, borderRadius: 999, border: `1px solid ${P.line}`, background: P.bg, cursor: "pointer", fontSize: 14, color: P.inkSoft }}>−</button>
-            <span style={{ fontWeight: 700, fontSize: 14, minWidth: 20, textAlign: "center" }}>{metaVisitas}</span>
-            <button onClick={() => setMetaVisitas(metaVisitas + 1)} style={{ width: 22, height: 22, borderRadius: 999, border: `1px solid ${P.line}`, background: P.bg, cursor: "pointer", fontSize: 14, color: P.inkSoft }}>+</button>
-          </div>
-        </div>
-        <div style={{ background: P.line, borderRadius: 999, height: 10, overflow: "hidden" }}>
-          <div style={{ width: `${metaPct}%`, height: "100%", background: metaPct >= 100 ? P.ok : P.wine, borderRadius: 999, transition: "width .4s" }} />
-        </div>
-        <div style={{ fontSize: 11.5, color: P.inkSoft, marginTop: 5 }}>
-          {visitasSemana} de {metaVisitas} visita(s) — {metaPct}%
-        </div>
-      </Card>
-
-      {/* Gráfico top comércios */}
-      {top5.length > 0 && (
-        <Card style={{ marginBottom: 12 }}>
-          <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 12 }}>Top comércios por venda</div>
-          {top5.map((r, i) => (
-            <div key={r.id} style={{ marginBottom: 8 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 }}>
-                <span style={{ color: P.ink, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "60%" }}>{r.nome}</span>
-                <span style={{ color: P.inkSoft }}>{brl(r.valorVendido)}</span>
-              </div>
-              <div style={{ background: P.line, borderRadius: 999, height: 7, overflow: "hidden" }}>
-                <div style={{ width: `${Math.round((r.valorVendido / maxVal) * 100)}%`, height: "100%", background: ["#8E2A4B","#B98A3E","#2F7A4D","#2a78d6","#eb6834"][i], borderRadius: 999 }} />
-              </div>
-            </div>
-          ))}
-        </Card>
-      )}
-
-      {/* Alertas de estoque baixo */}
-      {resumo.filter((r) => r.estoqueAtual <= 5 && r.status === "Ativo").length > 0 && (
-        <Card style={{ borderColor: P.pending, marginBottom: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-            <AlertTriangle size={14} color={P.pending} />
-            <span style={{ fontWeight: 700, fontSize: 13, color: P.pending }}>Estoque crítico</span>
-          </div>
-          {resumo.filter((r) => r.estoqueAtual <= 5 && r.status === "Ativo").map((r) => (
-            <div key={r.id} style={{ fontSize: 12.5, marginBottom: 4 }}>
-              <strong>{r.nome}</strong> — {r.estoqueAtual} un. restantes
-            </div>
-          ))}
-          <Btn onClick={() => goTo("roteiro")} variant="subtle" style={{ marginTop: 6 }}>
-            <Navigation size={13} /> Ver roteiro
-          </Btn>
-        </Card>
-      )}
-
-      <Btn onClick={() => goTo("prospeccao")} variant="ghost" style={{ width: "100%", marginBottom: 8 }}>
-        <Target size={14} /> Ir para prospecção ({prospectos.filter((p) => p.status === "Não contatado").length} pendentes)
-      </Btn>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────
-// PROSPECÇÃO TAB — KANBAN
-// ─────────────────────────────────────────
-function ProspeccaoTab({ prospectos, setProspectos, templates, onCriarComercio }) {
-  const [editing, setEditing]   = useState(null);
-  const [filtroC, setFiltroC]   = useState("Todos");
-  const [busca, setBusca]       = useState("");
-  const [kanbanCol, setKanbanCol] = useState(null); // null = all cols, or specific status
-  const [templateModal, setTemplateModal] = useState(null); // { prospecto, template }
-
-  const cidades = ["Todos", ...new Set(prospectos.map((p) => p.cidade))];
-
-  const filtered = prospectos.filter((p) => {
-    if (filtroC !== "Todos" && p.cidade !== filtroC) return false;
-    if (busca && !p.nome.toLowerCase().includes(busca.toLowerCase()) && !p.tipo.toLowerCase().includes(busca.toLowerCase())) return false;
-    return true;
-  });
-
-  function updateStatus(id, status) {
-    setProspectos(prospectos.map((p) => p.id === id ? { ...p, status, dataUltimoContato: todayISO() } : p));
-  }
-  function saveEdit(p) {
-    setProspectos(prospectos.map((x) => x.id === p.id ? p : x));
-    setEditing(null);
-  }
-  function buildWppUrl(p, template) {
-    const num = digits(p.contato);
-    if (!num) return null;
-    const msg = (template?.corpo || "")
-      .replace(/{nome}/g, p.nome)
-      .replace(/{responsavel}/g, p.responsavel || p.nome)
-      .replace(/{data}/g, fmtDate(todayISO()))
-      .replace(/{hora}/g, "10h");
-    return `https://wa.me/55${num}?text=${encMsg(msg)}`;
-  }
-  function enviarWpp(p, template) {
-    const url = buildWppUrl(p, template);
-    if (url) {
-      window.open(url, "_blank");
-      updateStatus(p.id, p.status === "Não contatado" ? "Contatado" : p.status);
-    }
-  }
-
-  // Kanban columns
-  const cols = PROSPECT_STATUS.map((s) => ({
-    status: s,
-    items: filtered.filter((p) => p.status === s),
-    style: PROSPECT_STATUS_STYLE[s],
-  }));
-
-  return (
-    <div style={{ paddingTop: 8 }}>
-      {/* Busca */}
-      <div style={{ position: "relative", marginBottom: 10 }}>
-        <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar estabelecimento..." style={{ ...iStyle, paddingLeft: 32 }} />
-        <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: P.inkSoft, pointerEvents: "none" }}>🔍</span>
-      </div>
-
-      {/* Filtro cidade */}
-      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, scrollbarWidth: "none", marginBottom: 12 }}>
-        {cidades.map((c) => (
-          <button key={c} onClick={() => setFiltroC(c)} style={{ whiteSpace: "nowrap", padding: "5px 12px", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 600, background: filtroC === c ? P.wine : P.card, color: filtroC === c ? "#fff" : P.inkSoft, boxShadow: filtroC === c ? "none" : `inset 0 0 0 1px ${P.line}` }}>
-            {c}
-          </button>
-        ))}
-      </div>
-
-      {/* Filtro coluna kanban */}
-      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, scrollbarWidth: "none", marginBottom: 14 }}>
-        <button onClick={() => setKanbanCol(null)} style={{ whiteSpace: "nowrap", padding: "5px 12px", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 600, background: kanbanCol === null ? P.ink : P.card, color: kanbanCol === null ? "#fff" : P.inkSoft, boxShadow: kanbanCol === null ? "none" : `inset 0 0 0 1px ${P.line}` }}>
-          Todos ({filtered.length})
-        </button>
-        {cols.map((col) => (
-          <button key={col.status} onClick={() => setKanbanCol(col.status === kanbanCol ? null : col.status)} style={{ whiteSpace: "nowrap", padding: "5px 12px", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 600, background: kanbanCol === col.status ? col.style.color : col.style.bg, color: kanbanCol === col.status ? "#fff" : col.style.color }}>
-            {col.status} ({col.items.length})
-          </button>
-        ))}
-      </div>
-
-      {/* Cards */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {(kanbanCol ? filtered.filter((p) => p.status === kanbanCol) : filtered).map((p) => (
-          <ProspectoCard
-            key={p.id}
-            p={p}
-            templates={templates}
-            onStatus={updateStatus}
-            onEdit={() => setEditing({ ...p })}
-            onWpp={(tpl) => enviarWpp(p, tpl)}
-            onTemplate={() => setTemplateModal({ prospecto: p })}
-            onCriarComercio={onCriarComercio}
-          />
-        ))}
-        {filtered.length === 0 && (
-          <Card style={{ textAlign: "center", color: P.inkSoft, fontSize: 13 }}>
-            Nenhum resultado para esta busca.
-          </Card>
-        )}
-      </div>
-
-      {/* Modal de edição */}
-      {editing && (
-        <Modal onClose={() => setEditing(null)} title={editing.nome}>
-          <Field label="Responsável / contato">
-            <input style={iStyle} value={editing.responsavel || ""} onChange={(e) => setEditing({ ...editing, responsavel: e.target.value })} placeholder="Nome do dono ou gerente" />
-          </Field>
-          <Field label="Telefone">
-            <input style={iStyle} value={editing.contato || ""} onChange={(e) => setEditing({ ...editing, contato: e.target.value })} placeholder="(12) 9xxxx-xxxx" />
-          </Field>
-          <Field label="Instagram (só @ sem @)">
-            <input style={iStyle} value={editing.instagram || ""} onChange={(e) => setEditing({ ...editing, instagram: e.target.value })} placeholder="boom.algodaodoce" />
-          </Field>
-          <Field label="Observações">
-            <textarea value={editing.obs || ""} onChange={(e) => setEditing({ ...editing, obs: e.target.value })} rows={3} style={{ ...iStyle, resize: "vertical" }} placeholder="Anotações sobre a prospecção..." />
-          </Field>
-          <Btn onClick={() => saveEdit(editing)} style={{ width: "100%", marginTop: 6 }}>Salvar</Btn>
-        </Modal>
-      )}
-
-      {/* Modal de templates */}
-      {templateModal && (
-        <Modal onClose={() => setTemplateModal(null)} title="Escolher template">
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {templates.filter((t) => t.canal === "whatsapp").map((t) => (
-              <button key={t.id} onClick={() => { enviarWpp(templateModal.prospecto, t); setTemplateModal(null); }} style={{ textAlign: "left", padding: "10px 14px", borderRadius: 10, border: `1px solid ${P.line}`, background: P.bg, cursor: "pointer" }}>
-                <div style={{ fontWeight: 600, fontSize: 13, color: P.wine }}>{t.nome}</div>
-                <div style={{ fontSize: 11.5, color: P.inkSoft, marginTop: 3, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{t.corpo.slice(0, 100)}...</div>
-              </button>
-            ))}
-          </div>
-        </Modal>
-      )}
-    </div>
-  );
-}
-
-function ProspectoCard({ p, templates, onStatus, onEdit, onWpp, onTemplate, onCriarComercio }) {
-  const [expanded, setExpanded] = useState(false);
-  const wppTpl = templates.find((t) => t.id === "t1");
-  const num = digits(p.contato);
-  const instaUser = p.instagram?.replace("@", "");
-
-  return (
-    <Card>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-            <span style={{ fontWeight: 700, fontSize: 14.5 }}>{p.nome}</span>
-            {p.prioridade === "Litoral" && <Star size={11} fill={P.gold} color={P.gold} />}
-            <StatusBadge status={p.status} />
-          </div>
-          <div style={{ fontSize: 12, color: P.inkSoft, marginTop: 3 }}>{p.tipo} · {p.cidade}</div>
-          {p.endereco && <div style={{ fontSize: 11.5, color: P.inkSoft, marginTop: 2 }}>{p.endereco}</div>}
-          {p.responsavel && <div style={{ fontSize: 11.5, color: P.inkSoft, marginTop: 2 }}>👤 {p.responsavel}</div>}
-          {p.contato && <div style={{ fontSize: 11.5, color: P.inkSoft, marginTop: 2 }}>📞 {p.contato}</div>}
-          {p.dataUltimoContato && <div style={{ fontSize: 10.5, color: P.inkSoft, marginTop: 3 }}>Último contato: {fmtDate(p.dataUltimoContato)}</div>}
-          {p.obs && <div style={{ fontSize: 11.5, color: P.inkSoft, marginTop: 4, fontStyle: "italic" }}>{p.obs}</div>}
-        </div>
-        <button onClick={() => setExpanded(!expanded)} style={{ background: "transparent", border: "none", cursor: "pointer", color: P.inkSoft, marginLeft: 4 }}>
-          <ChevronRight size={16} style={{ transform: expanded ? "rotate(90deg)" : "none", transition: "transform .2s" }} />
-        </button>
-      </div>
-
-      {/* Botões de envio */}
-      <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
-        {num && (
-          <Btn onClick={() => onTemplate()} variant="green" style={{ flex: 1, minWidth: 120, fontSize: 12 }}>
-            <MessageCircle size={13} /> WhatsApp
-          </Btn>
-        )}
-        {instaUser && (
-          <a href={`https://ig.me/m/${instaUser}`} target="_blank" rel="noreferrer" style={{ flex: 1, minWidth: 100, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 14px", borderRadius: 10, background: "#E1306C", color: "#fff", fontSize: 12, fontWeight: 600, textDecoration: "none" }}>
-            <Instagram size={13} /> DM Instagram
-          </a>
-        )}
-        <Btn onClick={onEdit} variant="subtle" style={{ flex: 1, minWidth: 80, fontSize: 12 }}>
-          <Edit3 size={13} /> Anotar
-        </Btn>
-      </div>
-
-      {/* Painel expandido: mudar status */}
-      {expanded && (
-        <div style={{ marginTop: 10, borderTop: `1px solid ${P.line}`, paddingTop: 10 }}>
-          <div style={{ fontSize: 11, color: P.inkSoft, marginBottom: 6 }}>Mover para:</div>
-          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-            {PROSPECT_STATUS.map((s) => (
-              <button key={s} onClick={() => onStatus(p.id, s)} style={{ fontSize: 11, padding: "5px 10px", borderRadius: 999, cursor: "pointer", border: "none", background: p.status === s ? PROSPECT_STATUS_STYLE[s].color : P.bg, color: p.status === s ? "#fff" : P.inkSoft, fontWeight: p.status === s ? 700 : 500 }}>
-                {s}
-              </button>
-            ))}
-          </div>
-          {p.status === "Fechado" && !p.comercioId && (
-            <Btn onClick={() => onCriarComercio(p)} style={{ width: "100%", marginTop: 8, fontSize: 12 }}>
-              <ArrowRight size={13} /> Criar comércio
-            </Btn>
-          )}
-          {p.comercioId && (
-            <div style={{ fontSize: 11, color: P.ok, marginTop: 6, fontWeight: 600 }}>✓ Já convertido em comércio</div>
-          )}
-        </div>
-      )}
-    </Card>
-  );
-}
-
-// ─────────────────────────────────────────
-// COMÉRCIOS TAB
-// ─────────────────────────────────────────
+// ---------------- Comércios ----------------
 function ComerciosTab({ comercios, setComercios, entregasCount }) {
-  const empty = { nome: "", tipo: "Padaria", endereco: "", contato: "", responsavel: "", comissaoPct: 25, status: "Em negociação" };
-  const [form, setForm]       = useState(empty);
-  const [editId, setEditId]   = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const empty = { nome: "", tipo: "Padaria", endereco: "", contato: "", responsavel: "", comissaoPct: 25, status: "Em negociação" };
+  const [form, setForm] = useState(empty);
+  const [editingId, setEditingId] = useState(null);
 
-  function openNew() { setForm(empty); setEditId(null); setShowForm(true); }
-  function openEdit(c) { setForm(c); setEditId(c.id); setShowForm(true); }
+  function openNew() {
+    setForm(empty);
+    setEditingId(null);
+    setShowForm(true);
+  }
+  function openEdit(c) {
+    setForm(c);
+    setEditingId(c.id);
+    setShowForm(true);
+  }
   function save() {
     if (!form.nome.trim()) return;
-    setComercios(editId ? comercios.map((c) => c.id === editId ? { ...form, id: editId } : c) : [...comercios, { ...form, id: uid() }]);
+    if (editingId) {
+      setComercios(comercios.map((c) => (c.id === editingId ? { ...form, id: editingId } : c)));
+    } else {
+      setComercios([...comercios, { ...form, id: uid() }]);
+    }
     setShowForm(false);
   }
-  function remove(id) { if (confirm("Remover este comércio?")) setComercios(comercios.filter((c) => c.id !== id)); }
+  function remove(id) {
+    setComercios(comercios.filter((c) => c.id !== id));
+  }
 
-  const sc = (s) => s === "Ativo" ? P.ok : s === "Inativo" ? P.pending : P.gold;
-  const sb = (s) => s === "Ativo" ? P.okSoft : s === "Inativo" ? P.pendingSoft : P.goldSoft;
+  const statusColor = (s) =>
+    s === "Ativo" ? PALETTE.ok : s === "Inativo" ? PALETTE.pending : PALETTE.gold;
+  const statusBg = (s) =>
+    s === "Ativo" ? PALETTE.okSoft : s === "Inativo" ? PALETTE.pendingSoft : PALETTE.goldSoft;
 
   return (
     <div style={{ paddingTop: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <div style={{ fontSize: 13, color: P.inkSoft }}>{comercios.length} comércio(s)</div>
-        <Btn onClick={openNew}><Plus size={14} /> Novo</Btn>
+        <div style={{ fontSize: 13, color: PALETTE.inkSoft }}>{comercios.length} comércio(s) cadastrado(s)</div>
+        <Btn onClick={openNew}><Plus size={15} /> Novo comércio</Btn>
       </div>
 
-      {comercios.length === 0 && <Card style={{ textAlign: "center", color: P.inkSoft, fontSize: 13 }}>Nenhum comércio ainda. Toque em "Novo" para cadastrar.</Card>}
+      {comercios.length === 0 && (
+        <Card style={{ textAlign: "center", color: PALETTE.inkSoft, fontSize: 13.5 }}>
+          Nenhum comércio cadastrado ainda. Toque em "Novo comércio" para começar.
+        </Card>
+      )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {comercios.map((c) => (
           <Card key={c.id}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <div style={{ flex: 1 }}>
+              <div>
                 <div style={{ fontWeight: 700, fontSize: 15 }}>{c.nome}</div>
-                <div style={{ fontSize: 12.5, color: P.inkSoft, marginTop: 2 }}>{c.tipo} · comissão {c.comissaoPct}%</div>
-                {c.endereco && <div style={{ fontSize: 12, color: P.inkSoft, marginTop: 2 }}>{c.endereco}</div>}
-                {c.responsavel && <div style={{ fontSize: 12, color: P.inkSoft }}>Responsável: {c.responsavel}{c.contato ? ` · ${c.contato}` : ""}</div>}
-                <div style={{ fontSize: 11.5, color: P.inkSoft, marginTop: 4 }}>{entregasCount(c.id)} lançamento(s)</div>
+                <div style={{ fontSize: 12.5, color: PALETTE.inkSoft, marginTop: 2 }}>{c.tipo} · comissão {c.comissaoPct}%</div>
+                {c.endereco && <div style={{ fontSize: 12.5, color: PALETTE.inkSoft, marginTop: 2 }}>{c.endereco}</div>}
+                {c.responsavel && <div style={{ fontSize: 12.5, color: PALETTE.inkSoft }}>Responsável: {c.responsavel} {c.contato && `· ${c.contato}`}</div>}
+                <div style={{ fontSize: 11.5, color: PALETTE.inkSoft, marginTop: 4 }}>{entregasCount(c.id)} lançamento(s) registrado(s)</div>
               </div>
-              <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: sb(c.status), color: sc(c.status), whiteSpace: "nowrap" }}>{c.status}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: statusBg(c.status), color: statusColor(c.status), whiteSpace: "nowrap" }}>
+                {c.status}
+              </span>
             </div>
-            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-              <Btn variant="subtle" onClick={() => openEdit(c)} style={{ flex: 1 }}><Edit3 size={13} /> Editar</Btn>
-              {c.contato && (
-                <a href={`https://wa.me/55${digits(c.contato)}`} target="_blank" rel="noreferrer" style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "9px 14px", borderRadius: 10, background: "#25D366", color: "#fff", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>
-                  <MessageCircle size={13} /> WhatsApp
-                </a>
-              )}
-              <Btn variant="ghost" onClick={() => remove(c.id)} style={{ padding: "9px 12px" }}><Trash2 size={13} /></Btn>
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <Btn variant="subtle" onClick={() => openEdit(c)} style={{ flex: 1 }}>Editar</Btn>
+              <Btn variant="ghost" onClick={() => remove(c.id)} style={{ flex: 1 }}><Trash2 size={14} /> Remover</Btn>
             </div>
           </Card>
         ))}
       </div>
 
       {showForm && (
-        <Modal onClose={() => setShowForm(false)} title={editId ? "Editar comércio" : "Novo comércio"}>
-          <Field label="Nome do estabelecimento *"><input style={iStyle} value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} /></Field>
+        <Modal onClose={() => setShowForm(false)} title={editingId ? "Editar comércio" : "Novo comércio"}>
+          <Field label="Nome do comércio">
+            <input style={inputStyle} value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} placeholder="Ex.: Padaria Bela Vista" />
+          </Field>
           <Field label="Tipo">
-            <select style={iStyle} value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })}>
-              {TIPO_OPTIONS.map((t) => <option key={t}>{t}</option>)}
+            <select style={inputStyle} value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value })}>
+              {TIPO_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
+          </Field>
+          <Field label="Endereço">
+            <input style={inputStyle} value={form.endereco} onChange={(e) => setForm({ ...form, endereco: e.target.value })} />
+          </Field>
+          <Field label="Responsável no local">
+            <input style={inputStyle} value={form.responsavel} onChange={(e) => setForm({ ...form, responsavel: e.target.value })} />
+          </Field>
+          <Field label="Contato/telefone">
+            <input style={inputStyle} value={form.contato} onChange={(e) => setForm({ ...form, contato: e.target.value })} />
+          </Field>
+          <Field label="% de comissão do lojista">
+            <input type="number" style={inputStyle} value={form.comissaoPct} onChange={(e) => setForm({ ...form, comissaoPct: e.target.value })} />
           </Field>
           <Field label="Status">
-            <select style={iStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-              {STATUS_OPTIONS.map((s) => <option key={s}>{s}</option>)}
+            <select style={inputStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+              {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           </Field>
-          <Field label="Endereço"><input style={iStyle} value={form.endereco} onChange={(e) => setForm({ ...form, endereco: e.target.value })} /></Field>
-          <Field label="Responsável"><input style={iStyle} value={form.responsavel} onChange={(e) => setForm({ ...form, responsavel: e.target.value })} /></Field>
-          <Field label="Contato (telefone)"><input style={iStyle} value={form.contato} onChange={(e) => setForm({ ...form, contato: e.target.value })} /></Field>
-          <Field label="Comissão (%)">
-            <input type="number" style={iStyle} value={form.comissaoPct} min={0} max={100} onChange={(e) => setForm({ ...form, comissaoPct: Number(e.target.value) })} />
-          </Field>
-          <Btn onClick={save} style={{ width: "100%", marginTop: 6 }}>Salvar</Btn>
+          <Btn onClick={save} style={{ width: "100%", marginTop: 6 }}>Salvar comércio</Btn>
         </Modal>
       )}
     </div>
   );
 }
 
-// ─────────────────────────────────────────
-// LANÇAMENTOS TAB
-// ─────────────────────────────────────────
+// ---------------- Entregas ----------------
 function EntregasTab({ comercios, entregas, setEntregas, lastEstoqueRestante }) {
-  const emptyForm = { comercioId: "", data: todayISO(), qtdReposta: "", qtdVendida: "", qtdRecolhida: 0, preco: 4.5, estoqueAnterior: "", recebidoPor: "", obs: "", status: "Pendente" };
-  const [form, setForm]         = useState(emptyForm);
   const [showForm, setShowForm] = useState(false);
-  const [reciboEnt, setReciboEnt] = useState(null);
-  const [filtroC, setFiltroC]   = useState("Todos");
+  const activeComercios = comercios;
+  const emptyBase = () => ({
+    comercioId: activeComercios[0]?.id || "",
+    data: todayISO(),
+    qtdReposta: 0,
+    qtdVendida: 0,
+    qtdRecolhida: 0,
+    preco: 18,
+    status: "Pendente",
+    recebidoPor: "",
+    obs: "",
+  });
+  const [form, setForm] = useState(emptyBase());
+  const [reciboEntrega, setReciboEntrega] = useState(null);
 
-  function openNew(comercioId = "") {
-    const est = comercioId ? lastEstoqueRestante(comercioId) : 0;
-    setForm({ ...emptyForm, comercioId, estoqueAnterior: est });
+  function openNew() {
+    setForm(emptyBase());
     setShowForm(true);
   }
   function save() {
-    if (!form.comercioId || form.qtdReposta === "") return;
-    setEntregas([...entregas, { ...form, id: uid() }]);
+    if (!form.comercioId) return;
+    const estoqueAnterior = lastEstoqueRestante(form.comercioId);
+    const novaEntrega = { ...form, id: uid(), estoqueAnterior };
+    setEntregas([...entregas, novaEntrega]);
     setShowForm(false);
+    setReciboEntrega(novaEntrega); // abre o recibo na hora, pronto para compartilhar
   }
-  function remove(id) { if (confirm("Remover lançamento?")) setEntregas(entregas.filter((e) => e.id !== id)); }
-  function marcarPago(id) { setEntregas(entregas.map((e) => e.id === id ? { ...e, status: "Pago" } : e)); }
+  function remove(id) {
+    setEntregas(entregas.filter((e) => e.id !== id));
+  }
+  function toggleStatus(id) {
+    setEntregas(entregas.map((e) => (e.id === id ? { ...e, status: e.status === "Pago" ? "Pendente" : "Pago" } : e)));
+  }
 
-  const filtered = filtroC === "Todos" ? entregas : entregas.filter((e) => e.comercioId === filtroC);
-  const sorted = [...filtered].sort((a, b) => b.data.localeCompare(a.data));
-  const getComercio = (id) => comercios.find((c) => c.id === id);
+  const nomeComercio = (id) => comercios.find((c) => c.id === id)?.nome || "—";
+  const sorted = [...entregas].sort((a, b) => (a.data < b.data ? 1 : -1));
 
   return (
     <div style={{ paddingTop: 8 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-        <div style={{ fontSize: 13, color: P.inkSoft }}>{filtered.length} lançamento(s)</div>
-        <Btn onClick={() => openNew()}><Plus size={14} /> Novo</Btn>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <div style={{ fontSize: 13, color: PALETTE.inkSoft }}>{entregas.length} lançamento(s)</div>
+        {comercios.length > 0 ? (
+          <Btn onClick={openNew}><Plus size={15} /> Novo lançamento</Btn>
+        ) : null}
       </div>
 
-      {/* Filtro comércio */}
-      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, scrollbarWidth: "none", marginBottom: 12 }}>
-        {["Todos", ...comercios.map((c) => c.id)].map((id) => {
-          const label = id === "Todos" ? "Todos" : comercios.find((c) => c.id === id)?.nome;
-          return (
-            <button key={id} onClick={() => setFiltroC(id)} style={{ whiteSpace: "nowrap", padding: "5px 12px", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 600, background: filtroC === id ? P.wine : P.card, color: filtroC === id ? "#fff" : P.inkSoft, boxShadow: filtroC === id ? "none" : `inset 0 0 0 1px ${P.line}` }}>
-              {label}
-            </button>
-          );
-        })}
-      </div>
-
-      {sorted.length === 0 && <Card style={{ textAlign: "center", color: P.inkSoft, fontSize: 13 }}>Nenhum lançamento ainda.</Card>}
+      {comercios.length === 0 && (
+        <Card style={{ textAlign: "center", color: PALETTE.inkSoft, fontSize: 13.5 }}>
+          Cadastre um comércio na aba "Comércios" antes de lançar entregas.
+        </Card>
+      )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {sorted.map((e) => {
-          const c = getComercio(e.comercioId);
-          const estRest = Number(e.estoqueAnterior || 0) + Number(e.qtdReposta || 0) - Number(e.qtdVendida || 0) - Number(e.qtdRecolhida || 0);
-          const val = Number(e.qtdVendida || 0) * Number(e.preco || 0);
+          const estoqueRestante = Number(e.estoqueAnterior || 0) + Number(e.qtdReposta || 0) - Number(e.qtdVendida || 0) - Number(e.qtdRecolhida || 0);
+          const valorVendido = Number(e.qtdVendida || 0) * Number(e.preco || 0);
           const pago = e.status === "Pago";
           return (
             <Card key={e.id}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 14 }}>{c?.nome || "Comércio removido"}</div>
-                  <div style={{ fontSize: 12, color: P.inkSoft }}>{fmtDate(e.data)}</div>
+                  <div style={{ fontWeight: 700, fontSize: 14.5 }}>{nomeComercio(e.comercioId)}</div>
+                  <div style={{ fontSize: 12, color: PALETTE.inkSoft }}>{fmtDate(e.data)}</div>
                 </div>
-                <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: pago ? P.okSoft : P.goldSoft, color: pago ? P.ok : P.gold }}>{e.status}</span>
+                <button
+                  onClick={() => toggleStatus(e.id)}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700,
+                    padding: "4px 10px", borderRadius: 999, border: "none", cursor: "pointer",
+                    background: pago ? PALETTE.okSoft : PALETTE.pendingSoft,
+                    color: pago ? PALETTE.ok : PALETTE.pending,
+                  }}
+                >
+                  {pago ? <Check size={12} /> : <Clock size={12} />} {e.status}
+                </button>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 10 }}>
-                <MiniStat label="Reposto" value={`${e.qtdReposta} un.`} />
-                <MiniStat label="Vendido" value={`${e.qtdVendida} un.`} />
-                <MiniStat label="Estoque" value={`${estRest} un.`} color={estRest <= 5 ? P.pending : P.ok} />
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 10, fontSize: 12.5 }}>
+                <Metric label="Reposto" value={`${e.qtdReposta} un.`} />
+                <Metric label="Vendido" value={`${e.qtdVendida} un.`} />
+                <Metric label="Recolhido" value={`${e.qtdRecolhida || 0} un.`} />
+                <Metric label="Estoque no ponto" value={`${estoqueRestante} un.`} />
+                <Metric label="Valor vendido" value={brl(valorVendido)} />
               </div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: P.wine, marginTop: 8 }}>{brl(val)}</div>
-              {e.obs && <div style={{ fontSize: 11.5, color: P.inkSoft, marginTop: 4, fontStyle: "italic" }}>{e.obs}</div>}
+              {e.obs && <div style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 8, fontStyle: "italic" }}>{e.obs}</div>}
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                <Btn onClick={() => setReciboEnt(e)} variant="subtle" style={{ flex: 1 }}><Receipt size={13} /> Recibo</Btn>
-                {!pago && <Btn onClick={() => marcarPago(e.id)} variant="green" style={{ flex: 1 }}><Check size={13} /> Marcar pago</Btn>}
-                <Btn variant="ghost" onClick={() => remove(e.id)} style={{ padding: "9px 12px" }}><Trash2 size={13} /></Btn>
+                <Btn variant="subtle" onClick={() => setReciboEntrega(e)} style={{ flex: 1 }}><Receipt size={14} /> Recibo</Btn>
+                <Btn variant="ghost" onClick={() => remove(e.id)} style={{ flex: 1 }}><Trash2 size={13} /> Remover</Btn>
               </div>
             </Card>
           );
@@ -1047,454 +760,695 @@ function EntregasTab({ comercios, entregas, setEntregas, lastEstoqueRestante }) 
 
       {showForm && (
         <Modal onClose={() => setShowForm(false)} title="Novo lançamento">
-          <Field label="Comércio *">
-            <select style={iStyle} value={form.comercioId} onChange={(e) => {
-              const id = e.target.value;
-              setForm({ ...form, comercioId: id, estoqueAnterior: id ? lastEstoqueRestante(id) : 0 });
-            }}>
-              <option value="">Selecione...</option>
-              {comercios.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+          <Field label="Comércio">
+            <select style={inputStyle} value={form.comercioId} onChange={(e) => setForm({ ...form, comercioId: e.target.value })}>
+              {activeComercios.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
             </select>
           </Field>
-          <Field label="Data"><input type="date" style={iStyle} value={form.data} onChange={(e) => setForm({ ...form, data: e.target.value })} /></Field>
-          <Field label="Estoque anterior (calculado)"><input type="number" style={iStyle} value={form.estoqueAnterior} onChange={(e) => setForm({ ...form, estoqueAnterior: Number(e.target.value) })} /></Field>
-          <Field label="Qtd. reposta agora *"><input type="number" style={iStyle} value={form.qtdReposta} onChange={(e) => setForm({ ...form, qtdReposta: Number(e.target.value) })} /></Field>
-          <Field label="Qtd. vendida desde última visita"><input type="number" style={iStyle} value={form.qtdVendida} onChange={(e) => setForm({ ...form, qtdVendida: Number(e.target.value) })} /></Field>
-          <Field label="Qtd. recolhida agora"><input type="number" style={iStyle} value={form.qtdRecolhida} onChange={(e) => setForm({ ...form, qtdRecolhida: Number(e.target.value) })} /></Field>
-          <Field label="Preço por pote (R$)"><input type="number" step="0.5" style={iStyle} value={form.preco} onChange={(e) => setForm({ ...form, preco: Number(e.target.value) })} /></Field>
-          <Field label="Recebido por"><input style={iStyle} value={form.recebidoPor} onChange={(e) => setForm({ ...form, recebidoPor: e.target.value })} placeholder="Nome de quem assinou" /></Field>
-          <Field label="Observações"><textarea style={{ ...iStyle, resize: "vertical" }} rows={2} value={form.obs} onChange={(e) => setForm({ ...form, obs: e.target.value })} /></Field>
-          <Btn onClick={save} style={{ width: "100%", marginTop: 6 }}>Salvar lançamento</Btn>
+          <div style={{ fontSize: 11.5, color: PALETTE.inkSoft, marginTop: -4, marginBottom: 10 }}>
+            Estoque anterior no ponto: {lastEstoqueRestante(form.comercioId)} un. (calculado automaticamente do último lançamento)
+          </div>
+          <Field label="Data da visita">
+            <input type="date" style={inputStyle} value={form.data} onChange={(e) => setForm({ ...form, data: e.target.value })} />
+          </Field>
+          <Field label="Quantidade reposta nesta visita">
+            <input type="number" style={inputStyle} value={form.qtdReposta} onChange={(e) => setForm({ ...form, qtdReposta: e.target.value })} />
+          </Field>
+          <Field label="Quantidade vendida desde a última visita">
+            <input type="number" style={inputStyle} value={form.qtdVendida} onChange={(e) => setForm({ ...form, qtdVendida: e.target.value })} />
+          </Field>
+          <Field label="Quantidade recolhida nesta visita (avaria/vencido/devolução)">
+            <input type="number" style={inputStyle} value={form.qtdRecolhida} onChange={(e) => setForm({ ...form, qtdRecolhida: e.target.value })} />
+          </Field>
+          <Field label="Preço de venda ao público (R$)">
+            <input type="number" style={inputStyle} value={form.preco} onChange={(e) => setForm({ ...form, preco: e.target.value })} />
+          </Field>
+          <Field label="Status do pagamento">
+            <select style={inputStyle} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+              <option value="Pendente">Pendente</option>
+              <option value="Pago">Pago</option>
+            </select>
+          </Field>
+          <Field label="Recebido por (nome de quem está no comércio)">
+            <input style={inputStyle} value={form.recebidoPor} onChange={(e) => setForm({ ...form, recebidoPor: e.target.value })} placeholder="Opcional, aparece no recibo" />
+          </Field>
+          <Field label="Observações">
+            <input style={inputStyle} value={form.obs} onChange={(e) => setForm({ ...form, obs: e.target.value })} placeholder="Opcional" />
+          </Field>
+          <Btn onClick={save} style={{ width: "100%", marginTop: 6 }}>Salvar e gerar recibo</Btn>
         </Modal>
       )}
 
-      {reciboEnt && (
-        <ReciboModal entrega={reciboEnt} comercio={getComercio(reciboEnt.comercioId)} onClose={() => setReciboEnt(null)} />
+      {reciboEntrega && (
+        <ReciboModal
+          entrega={reciboEntrega}
+          comercio={comercios.find((c) => c.id === reciboEntrega.comercioId)}
+          onClose={() => setReciboEntrega(null)}
+        />
       )}
     </div>
   );
 }
 
-function MiniStat({ label, value, color }) {
+function Metric({ label, value }) {
   return (
-    <div style={{ background: P.bg, borderRadius: 8, padding: "6px 8px", textAlign: "center" }}>
-      <div style={{ fontSize: 10, color: P.inkSoft }}>{label}</div>
-      <div style={{ fontSize: 13.5, fontWeight: 700, color: color || P.ink, marginTop: 2 }}>{value}</div>
+    <div style={{ background: PALETTE.bg, borderRadius: 8, padding: "6px 9px" }}>
+      <div style={{ fontSize: 10.5, color: PALETTE.inkSoft }}>{label}</div>
+      <div style={{ fontWeight: 700 }}>{value}</div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────
-// ROTEIRO TAB
-// ─────────────────────────────────────────
-function RoteiroTab({ comercios, entregas }) {
-  const hoje = todayISO();
-
-  // Para cada comércio ativo, calcular estado atual
-  const paradas = comercios
-    .filter((c) => c.status === "Ativo")
-    .map((c) => {
-      const lista = entregas.filter((e) => e.comercioId === c.id).sort((a, b) => a.data > b.data ? 1 : -1);
-      const last = lista[lista.length - 1];
-      const estoqueAtual = last
-        ? Number(last.estoqueAnterior || 0) + Number(last.qtdReposta || 0) - Number(last.qtdVendida || 0) - Number(last.qtdRecolhida || 0)
-        : 0;
-      const qtdReposta = last ? Number(last.qtdReposta || 0) : 0;
-      const qtdVendida = last ? Number(last.qtdVendida || 0) : 0;
-      const taxaVenda = qtdReposta > 0 ? (qtdVendida / qtdReposta) * 100 : 0;
-      const pendentePagamento = lista.some((e) => e.status !== "Pago");
-      const ultimaVisita = last?.data || null;
-
-      // Critérios para incluir no roteiro:
-      const precisaVisita = estoqueAtual <= 5 || taxaVenda >= 70 || pendentePagamento || !ultimaVisita;
-
-      // Bairro: extrair da parte após " - " no endereço
-      const bairro = c.endereco?.split(" - ")[1]?.split(",")[0] || c.cidade || "Sem bairro";
-
-      return { ...c, estoqueAtual, taxaVenda: Math.round(taxaVenda), pendentePagamento, ultimaVisita, precisaVisita, bairro };
-    })
-    .filter((p) => p.precisaVisita);
-
-  // Agrupar por bairro
-  const grupos = paradas.reduce((acc, p) => {
-    (acc[p.bairro] = acc[p.bairro] || []).push(p);
-    return acc;
-  }, {});
-
-  const totalParadas = paradas.length;
-
-  function buildMapsUrl(enderecos) {
-    const base = "https://www.google.com/maps/dir/";
-    return base + enderecos.map((e) => encodeURIComponent(e)).join("/");
+// ---------------- Resumo ----------------
+function ResumoTab({ resumo, totalGeral }) {
+  if (resumo.length === 0) {
+    return (
+      <Card style={{ textAlign: "center", color: PALETTE.inkSoft, fontSize: 13.5, marginTop: 8 }}>
+        Cadastre comércios e registre lançamentos para ver o resumo aqui.
+      </Card>
+    );
   }
-
   return (
     <div style={{ paddingTop: 8 }}>
-      <Card style={{ marginBottom: 14, background: P.wineSoft, borderColor: P.wine }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <Navigation size={18} color={P.wine} />
+      <Card style={{ marginBottom: 12, background: PALETTE.wine, border: "none", color: "#fff" }}>
+        <div style={{ fontSize: 12, opacity: 0.85, textTransform: "uppercase", letterSpacing: 1 }}>Total geral</div>
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 14, color: P.wine }}>Roteiro otimizado de hoje</div>
-            <div style={{ fontSize: 12, color: P.inkSoft, marginTop: 2 }}>{totalParadas} ponto(s) que precisam de visita · {Object.keys(grupos).length} bairro(s)</div>
+            <div style={{ fontSize: 11, opacity: 0.85 }}>Vendido</div>
+            <div style={{ fontSize: 17, fontWeight: 700 }}>{brl(totalGeral.valorVendido)}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, opacity: 0.85 }}>A receber</div>
+            <div style={{ fontSize: 17, fontWeight: 700 }}>{brl(totalGeral.aReceber)}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, opacity: 0.85 }}>Pendente</div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: "#FBEAE0" }}>{brl(totalGeral.pendente)}</div>
           </div>
         </div>
       </Card>
 
-      {totalParadas === 0 && (
-        <Card style={{ textAlign: "center", color: P.inkSoft, fontSize: 13 }}>
-          <Check size={20} color={P.ok} style={{ marginBottom: 6 }} />
-          <div>Nenhuma visita urgente hoje! Todos os pontos estão com estoque e pagamentos em dia.</div>
-        </Card>
-      )}
-
-      {Object.entries(grupos).map(([bairro, pontos]) => (
-        <div key={bairro} style={{ marginBottom: 16 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <div style={{ fontWeight: 700, fontSize: 13.5, color: P.wine }}>📍 {bairro}</div>
-            {pontos[0]?.endereco && (
-              <a
-                href={buildMapsUrl(pontos.map((p) => p.endereco + ", " + p.cidade + " SP"))}
-                target="_blank"
-                rel="noreferrer"
-                style={{ fontSize: 11, color: P.wine, fontWeight: 600, textDecoration: "none", display: "flex", alignItems: "center", gap: 3 }}
-              >
-                <Navigation size={11} /> Maps
-              </a>
-            )}
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {pontos.map((p, i) => (
-              <Card key={p.id}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14 }}>{i + 1}. {p.nome}</div>
-                    {p.endereco && <div style={{ fontSize: 11.5, color: P.inkSoft, marginTop: 2 }}>{p.endereco}</div>}
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
-                      {p.estoqueAtual <= 5 && (
-                        <span style={{ fontSize: 10.5, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: P.pendingSoft, color: P.pending }}>
-                          ⚠️ Estoque: {p.estoqueAtual} un.
-                        </span>
-                      )}
-                      {p.taxaVenda >= 70 && (
-                        <span style={{ fontSize: 10.5, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: P.goldSoft, color: P.gold }}>
-                          🔥 Venda: {p.taxaVenda}%
-                        </span>
-                      )}
-                      {p.pendentePagamento && (
-                        <span style={{ fontSize: 10.5, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: P.wineSoft, color: P.wine }}>
-                          💰 Cobrança pendente
-                        </span>
-                      )}
-                      {!p.ultimaVisita && (
-                        <span style={{ fontSize: 10.5, fontWeight: 600, padding: "2px 8px", borderRadius: 999, background: P.line, color: P.inkSoft }}>
-                          🆕 Primeira visita
-                        </span>
-                      )}
-                    </div>
-                    {p.ultimaVisita && <div style={{ fontSize: 10.5, color: P.inkSoft, marginTop: 4 }}>Última visita: {fmtDate(p.ultimaVisita)}</div>}
-                  </div>
-                </div>
-                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                  {p.contato && (
-                    <a
-                      href={`https://wa.me/55${digits(p.contato)}?text=${encMsg(`Oi ${p.responsavel || ""}! Estou passando aí em ${p.nome} hoje para reabastecer o algodão doce. Pode me aguardar? 😊`)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "8px", borderRadius: 10, background: "#25D366", color: "#fff", fontSize: 12, fontWeight: 600, textDecoration: "none" }}
-                    >
-                      <MessageCircle size={13} /> Avisar chegada
-                    </a>
-                  )}
-                  {p.endereco && (
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.endereco + ", " + p.cidade)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "8px", borderRadius: 10, background: P.goldSoft, color: P.gold, fontSize: 12, fontWeight: 600, textDecoration: "none" }}
-                    >
-                      <Navigation size={13} /> Ver no Maps
-                    </a>
-                  )}
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
-      ))}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {resumo.map((r) => (
+          <Card key={r.id}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div style={{ fontWeight: 700, fontSize: 15 }}>{r.nome}</div>
+              {r.pendente > 0 && (
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: PALETTE.pendingSoft, color: PALETTE.pending }}>
+                  {brl(r.pendente)} pendente
+                </span>
+              )}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 10, fontSize: 12.5 }}>
+              <Metric label="Estoque no ponto" value={`${r.estoqueAtual} un.`} />
+              <Metric label="Vendido (total)" value={`${r.totalVendido} un.`} />
+              <Metric label="Visitas" value={r.visitas} />
+              <Metric label="Valor vendido" value={brl(r.valorVendido)} />
+              <Metric label="Comissão lojista" value={brl(r.valorComissao)} />
+              <Metric label="A receber (líq.)" value={brl(r.aReceber)} />
+            </div>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────
-// TEMPLATES TAB
-// ─────────────────────────────────────────
-function TemplatesTab({ templates, setTemplates }) {
-  const [editing, setEditing] = useState(null);
-  const [copied, setCopied]   = useState(null);
+// ---------------- Painel (Dashboard / Vendas) ----------------
+function PainelTab({ prospectos, comercios, resumo, totalGeral, entregas, metaVisitas, setMetaVisitas, goTo }) {
+  const counts = useMemo(() => {
+    const c = { "Não contatado": 0, "Contatado": 0, "Visitado": 0, "Fechado": 0, "Recusou": 0 };
+    prospectos.forEach((p) => { c[p.status] = (c[p.status] || 0) + 1; });
+    return c;
+  }, [prospectos]);
 
-  function save(t) {
-    setTemplates(templates.map((x) => x.id === t.id ? t : x));
-    setEditing(null);
-  }
+  const totalTrabalhado = counts["Visitado"] + counts["Fechado"] + counts["Recusou"];
+  const taxaConversao = totalTrabalhado > 0 ? counts["Fechado"] / totalTrabalhado : null;
 
-  function copyText(t) {
-    const texto = t.corpo.replace(/{nome}/g, "Cliente").replace(/{responsavel}/g, "Responsável").replace(/{data}/g, fmtDate(todayISO())).replace(/{hora}/g, "10h");
-    navigator.clipboard?.writeText(texto).catch(() => {});
-    setCopied(t.id);
-    setTimeout(() => setCopied(null), 1500);
-  }
+  // início da semana (segunda-feira)
+  const inicioSemana = useMemo(() => {
+    const d = new Date();
+    const dia = d.getDay(); // 0=domingo
+    const diff = dia === 0 ? 6 : dia - 1;
+    d.setDate(d.getDate() - diff);
+    return d.toISOString().slice(0, 10);
+  }, []);
+  const visitasEstaSemana = prospectos.filter(
+    (p) => p.dataUltimoContato && p.dataUltimoContato >= inicioSemana && ["Visitado", "Fechado", "Recusou"].includes(p.status)
+  ).length;
+  const progressoMeta = Math.min(1, visitasEstaSemana / Math.max(1, Number(metaVisitas) || 1));
 
-  const canalIcon = (c) => c === "whatsapp" ? "💬" : c === "email" ? "📧" : "📱";
-  const canalLabel = (c) => c === "whatsapp" ? "WhatsApp" : c === "email" ? "E-mail" : "Instagram";
+  const comerciosAtivos = comercios.filter((c) => c.status === "Ativo").length;
+
+  const inicioMes = new Date().toISOString().slice(0, 7); // YYYY-MM
+  const vendasMes = entregas
+    .filter((e) => (e.data || "").startsWith(inicioMes))
+    .reduce((s, e) => s + Number(e.qtdVendida || 0) * Number(e.preco || 0), 0);
+
+  // ---- meta de comércios necessários, com base no giro real (não em potes/semana teóricos) ----
+  const [metaLiquida, setMetaLiquidaState] = useState(() => loadLocal("metaLiquidaMensal", 10000));
+  const [giroQuinzenal, setGiroQuinzenalState] = useState(() => loadLocal("giroQuinzenalPote", 12.5));
+  const [margemPote, setMargemPoteState] = useState(() => loadLocal("margemLiquidaPote", 5.615));
+
+  function setMetaLiquida(v) { setMetaLiquidaState(v); saveLocal("metaLiquidaMensal", v); }
+  function setGiroQuinzenal(v) { setGiroQuinzenalState(v); saveLocal("giroQuinzenalPote", v); }
+  function setMargemPote(v) { setMargemPoteState(v); saveLocal("margemLiquidaPote", v); }
+
+  const potesSemanaNecessarios = margemPote > 0 ? (Number(metaLiquida) / Number(margemPote)) / 4.33 : 0;
+  const giroSemanalPorComercio = (Number(giroQuinzenal) || 0) / 15 * 7;
+  const comerciosNecessarios = giroSemanalPorComercio > 0 ? Math.ceil(potesSemanaNecessarios / giroSemanalPorComercio) : 0;
+  const gapComercios = comerciosNecessarios - comerciosAtivos;
 
   return (
     <div style={{ paddingTop: 8 }}>
-      <div style={{ fontSize: 12.5, color: P.inkSoft, marginBottom: 14 }}>
-        Use as variáveis <strong>{"{nome}"}</strong>, <strong>{"{responsavel}"}</strong>, <strong>{"{data}"}</strong> e <strong>{"{hora}"}</strong> para personalizar automaticamente.
+      {/* meta de visitas semanais */}
+      <Card style={{ marginBottom: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>Meta de visitas desta semana</div>
+          <input
+            type="number"
+            value={metaVisitas}
+            onChange={(e) => setMetaVisitas(e.target.value)}
+            style={{ width: 56, textAlign: "center", padding: "4px 6px", borderRadius: 8, border: `1px solid ${PALETTE.line}`, fontSize: 13 }}
+          />
+        </div>
+        <div style={{ background: PALETTE.bg, borderRadius: 999, height: 10, marginTop: 10, overflow: "hidden" }}>
+          <div style={{ width: `${progressoMeta * 100}%`, background: PALETTE.wine, height: "100%", borderRadius: 999, transition: "width .3s" }} />
+        </div>
+        <div style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 6 }}>
+          {visitasEstaSemana} de {metaVisitas} visitas feitas esta semana
+        </div>
+      </Card>
+
+      {/* taxa de conversão */}
+      <Card style={{ marginBottom: 12, background: PALETTE.wine, border: "none" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontSize: 11, color: PALETTE.wineSoft, textTransform: "uppercase", letterSpacing: 1 }}>Taxa de conversão</div>
+            <div style={{ fontSize: 30, fontWeight: 800, color: "#fff", marginTop: 4 }}>
+              {taxaConversao === null ? "—" : `${Math.round(taxaConversao * 100)}%`}
+            </div>
+            <div style={{ fontSize: 11.5, color: PALETTE.wineSoft, marginTop: 2 }}>
+              {counts["Fechado"]} fechados de {totalTrabalhado} visitados
+            </div>
+          </div>
+          <TrendingUp size={34} color="#F6ECD9" />
+        </div>
+      </Card>
+
+      {/* funil de prospecção */}
+      <div style={{ fontWeight: 700, fontSize: 13, color: PALETTE.inkSoft, margin: "4px 0 8px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+        Funil de prospecção
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
+        {PROSPECT_STATUS.map((s) => (
+          <button key={s} onClick={() => goTo("prospeccao")} style={{ all: "unset", cursor: "pointer" }}>
+            <Card style={{ padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 13, color: PALETTE.ink }}>{s}</span>
+              <span style={{
+                fontSize: 13, fontWeight: 700, color: PALETTE[PROSPECT_STATUS_COLOR[s]] || PALETTE.ink,
+                background: PALETTE.bg, borderRadius: 999, padding: "2px 12px",
+              }}>{counts[s] || 0}</span>
+            </Card>
+          </button>
+        ))}
       </div>
 
+      {/* resumo geral */}
+      <div style={{ fontWeight: 700, fontSize: 13, color: PALETTE.inkSoft, margin: "4px 0 8px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+        Visão geral do consignado
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+        <Card><Metric label="Comércios ativos" value={comerciosAtivos} /></Card>
+        <Card><Metric label="Vendido este mês" value={brl(vendasMes)} /></Card>
+        <Card><Metric label="A receber (total)" value={brl(totalGeral.aReceber)} /></Card>
+        <Card><Metric label="Pendente de pagamento" value={brl(totalGeral.pendente)} /></Card>
+      </div>
+
+      {/* meta de comércios necessários, com giro real */}
+      <div style={{ fontWeight: 700, fontSize: 13, color: PALETTE.inkSoft, margin: "4px 0 8px", textTransform: "uppercase", letterSpacing: 0.5 }}>
+        Meta de comércios (giro real)
+      </div>
+      <Card style={{ marginBottom: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+          <label>
+            <div style={{ fontSize: 10.5, color: PALETTE.inkSoft, marginBottom: 3 }}>Meta líquida mensal (R$)</div>
+            <input type="number" value={metaLiquida} onChange={(e) => setMetaLiquida(e.target.value)} style={inputStyle} />
+          </label>
+          <label>
+            <div style={{ fontSize: 10.5, color: PALETTE.inkSoft, marginBottom: 3 }}>Giro médio (potes/15 dias)</div>
+            <input type="number" value={giroQuinzenal} onChange={(e) => setGiroQuinzenal(e.target.value)} style={inputStyle} />
+          </label>
+        </div>
+        <label style={{ display: "block", marginBottom: 12 }}>
+          <div style={{ fontSize: 10.5, color: PALETTE.inkSoft, marginBottom: 3 }}>Margem líquida por pote (R$)</div>
+          <input type="number" step="0.001" value={margemPote} onChange={(e) => setMargemPote(e.target.value)} style={inputStyle} />
+        </label>
+
+        <div style={{ borderTop: `1px dashed ${PALETTE.line}`, paddingTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontSize: 11, color: PALETTE.inkSoft }}>Comércios ativos necessários</div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: PALETTE.wine }}>{comerciosNecessarios}</div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 11, color: PALETTE.inkSoft }}>Você tem hoje</div>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>{comerciosAtivos}</div>
+          </div>
+        </div>
+        <div style={{
+          marginTop: 10, fontSize: 12.5, fontWeight: 600, textAlign: "center", padding: "8px 10px", borderRadius: 8,
+          background: gapComercios > 0 ? PALETTE.pendingSoft : PALETTE.okSoft,
+          color: gapComercios > 0 ? PALETTE.pending : PALETTE.ok,
+        }}>
+          {gapComercios > 0
+            ? `Faltam fechar mais ${gapComercios} comércio(s) para bater a meta`
+            : "Meta batida com os comércios ativos atuais 🎉"}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ---------------- Prospecção ----------------
+const DEFAULT_TEMPLATE =
+  "Olá! Aqui é da Boom Algodão Doce 🍭 — marca com 9 anos de festas infantis aqui na região. " +
+  "Queria saber se o(a) {nome} teria interesse em receber alguns potes de algodão doce gourmet em consignação: " +
+  "sem custo, sem compromisso, vocês só pagam pelo que vender. Posso passar aí um dia desses pra deixar? 😊";
+
+function buildWhatsAppLink(prospecto, template) {
+  const texto = template.replaceAll("{nome}", prospecto.nome);
+  const digits = (prospecto.contato || "").replace(/\D/g, "");
+  const base = digits ? `https://wa.me/55${digits}` : "https://wa.me/";
+  return `${base}?text=${encodeURIComponent(texto)}`;
+}
+
+function ProspeccaoTab({ prospectos, setProspectos, onCriarComercio }) {
+  const [filtroStatus, setFiltroStatus] = useState("Todos");
+  const [busca, setBusca] = useState("");
+  const [editing, setEditing] = useState(null); // prospecto sendo editado
+  const [template, setTemplate] = useState(() => loadLocal("mensagemTriagemWhatsApp", DEFAULT_TEMPLATE));
+  const [showTemplate, setShowTemplate] = useState(false);
+
+  function salvarTemplate(novo) {
+    setTemplate(novo);
+    saveLocal("mensagemTriagemWhatsApp", novo);
+  }
+
+  function enviarWhatsApp(p) {
+    window.open(buildWhatsAppLink(p, template), "_blank");
+    if (p.status === "Não contatado") {
+      updateStatus(p.id, "Contatado");
+    }
+  }
+
+  const filtered = useMemo(() => {
+    return prospectos.filter((p) => {
+      if (filtroStatus !== "Todos" && p.status !== filtroStatus) return false;
+      if (busca.trim()) {
+        const q = busca.toLowerCase();
+        if (!p.nome.toLowerCase().includes(q) && !p.cidade.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  }, [prospectos, filtroStatus, busca]);
+
+  function updateStatus(id, status) {
+    setProspectos(prospectos.map((p) => (p.id === id ? { ...p, status, dataUltimoContato: todayISO() } : p)));
+  }
+  function saveEdit(updated) {
+    setProspectos(prospectos.map((p) => (p.id === updated.id ? updated : p)));
+    setEditing(null);
+  }
+
+  const statusFiltros = ["Todos", ...PROSPECT_STATUS];
+
+  return (
+    <div style={{ paddingTop: 8 }}>
+      <Card style={{ marginBottom: 10 }}>
+        <button
+          onClick={() => setShowTemplate(!showTemplate)}
+          style={{ all: "unset", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}
+        >
+          <span style={{ fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
+            <MessageCircle size={15} color={PALETTE.wine} /> Mensagem de triagem (WhatsApp)
+          </span>
+          <span style={{ fontSize: 11, color: PALETTE.wine, fontWeight: 700 }}>{showTemplate ? "Fechar" : "Editar"}</span>
+        </button>
+        {showTemplate && (
+          <div style={{ marginTop: 10 }}>
+            <textarea
+              value={template}
+              onChange={(e) => salvarTemplate(e.target.value)}
+              rows={5}
+              style={{ ...inputStyle, resize: "vertical" }}
+            />
+            <div style={{ fontSize: 10.5, color: PALETTE.inkSoft, marginTop: 4 }}>
+              Use <strong>{"{nome}"}</strong> onde quiser que entre o nome do comércio automaticamente.
+            </div>
+          </div>
+        )}
+      </Card>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6, background: PALETTE.card, border: `1px solid ${PALETTE.line}`, borderRadius: 10, padding: "6px 10px" }}>
+          <Search size={15} color={PALETTE.inkSoft} />
+          <input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por nome ou cidade"
+            style={{ border: "none", outline: "none", fontSize: 13, flex: 1, background: "transparent" }}
+          />
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 8 }}>
+        {statusFiltros.map((s) => (
+          <button
+            key={s}
+            onClick={() => setFiltroStatus(s)}
+            style={{
+              whiteSpace: "nowrap", padding: "6px 12px", borderRadius: 999, border: "none", cursor: "pointer",
+              fontSize: 12, fontWeight: 600,
+              background: filtroStatus === s ? PALETTE.wine : PALETTE.card,
+              color: filtroStatus === s ? "#fff" : PALETTE.inkSoft,
+              boxShadow: filtroStatus === s ? "none" : `inset 0 0 0 1px ${PALETTE.line}`,
+            }}
+          >
+            {s} {s !== "Todos" ? `(${prospectos.filter((p) => p.status === s).length})` : `(${prospectos.length})`}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ fontSize: 12, color: PALETTE.inkSoft, marginBottom: 10 }}>{filtered.length} comércio(s)</div>
+
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {templates.map((t) => (
-          <Card key={t.id}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 14 }}>{t.nome}</div>
-                <div style={{ fontSize: 11.5, color: P.inkSoft, marginTop: 2 }}>{canalIcon(t.canal)} {canalLabel(t.canal)}</div>
+        {filtered.map((p) => (
+          <Card key={p.id}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontWeight: 700, fontSize: 14.5 }}>{p.nome}</span>
+                  {p.prioridade === "Litoral" && <Star size={12} fill={PALETTE.gold} color={PALETTE.gold} />}
+                </div>
+                <div style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 2 }}>{p.tipo} · {p.cidade}</div>
+                {p.endereco && (
+                  <div style={{ fontSize: 11.5, color: PALETTE.inkSoft, marginTop: 3, display: "flex", alignItems: "center", gap: 4 }}>
+                    <MapPin size={11} /> {p.endereco}
+                  </div>
+                )}
+                {p.contato && (
+                  <div style={{ fontSize: 11.5, color: PALETTE.inkSoft, marginTop: 2, display: "flex", alignItems: "center", gap: 4 }}>
+                    <Phone size={11} /> {p.contato}
+                  </div>
+                )}
               </div>
-              <div style={{ display: "flex", gap: 6 }}>
-                <Btn variant="subtle" onClick={() => copyText(t)} style={{ padding: "6px 10px", fontSize: 12 }}>
-                  <Copy size={12} /> {copied === t.id ? "Copiado!" : "Copiar"}
-                </Btn>
-                <Btn variant="ghost" onClick={() => setEditing({ ...t })} style={{ padding: "6px 10px", fontSize: 12 }}>
-                  <Edit3 size={12} />
-                </Btn>
-              </div>
+              {p.comercioId && (
+                <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999, background: PALETTE.okSoft, color: PALETTE.ok, whiteSpace: "nowrap" }}>
+                  Já é comércio
+                </span>
+              )}
             </div>
-            <div style={{ fontSize: 12, color: P.inkSoft, background: P.bg, borderRadius: 8, padding: "8px 10px", whiteSpace: "pre-wrap", lineHeight: 1.5, maxHeight: 80, overflow: "hidden", position: "relative" }}>
-              {t.corpo}
-              <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 24, background: "linear-gradient(transparent, #FBF6F2)" }} />
+
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 10 }}>
+              {PROSPECT_STATUS.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => updateStatus(p.id, s)}
+                  style={{
+                    fontSize: 11, padding: "5px 10px", borderRadius: 999, cursor: "pointer",
+                    border: "none",
+                    background: p.status === s ? PALETTE.wine : PALETTE.bg,
+                    color: p.status === s ? "#fff" : PALETTE.inkSoft,
+                    fontWeight: p.status === s ? 700 : 500,
+                  }}
+                >
+                  {s}
+                </button>
+              ))}
             </div>
+            {p.dataUltimoContato && (
+              <div style={{ fontSize: 10.5, color: PALETTE.inkSoft, marginTop: 6 }}>Último contato: {fmtDate(p.dataUltimoContato)}</div>
+            )}
+            {p.obs && <div style={{ fontSize: 11.5, color: PALETTE.inkSoft, marginTop: 4, fontStyle: "italic" }}>{p.obs}</div>}
+
+            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+              <Btn onClick={() => enviarWhatsApp(p)} style={{ flex: 1 }}>
+                <MessageCircle size={14} /> Enviar WhatsApp
+              </Btn>
+              <Btn variant="subtle" onClick={() => setEditing(p)} style={{ flex: 1 }}>Anotar</Btn>
+            </div>
+            {p.status === "Fechado" && !p.comercioId && (
+              <Btn onClick={() => onCriarComercio(p)} style={{ width: "100%", marginTop: 8 }}>
+                <ArrowRight size={13} /> Criar comércio
+              </Btn>
+            )}
           </Card>
         ))}
       </div>
 
       {editing && (
         <Modal onClose={() => setEditing(null)} title={editing.nome}>
-          <Field label="Nome do template">
-            <input style={iStyle} value={editing.nome} onChange={(e) => setEditing({ ...editing, nome: e.target.value })} />
+          <Field label="Observações / motivo">
+            <textarea
+              value={editing.obs}
+              onChange={(e) => setEditing({ ...editing, obs: e.target.value })}
+              rows={4}
+              style={{ ...inputStyle, resize: "vertical" }}
+              placeholder="Ex.: pediu para voltar semana que vem, dono só chega às 14h, recusou por já ter fornecedor..."
+            />
           </Field>
-          <Field label="Canal">
-            <select style={iStyle} value={editing.canal} onChange={(e) => setEditing({ ...editing, canal: e.target.value })}>
-              <option value="whatsapp">WhatsApp</option>
-              <option value="email">E-mail</option>
-              <option value="instagram">Instagram</option>
-            </select>
+          <Field label="Telefone / contato">
+            <input style={inputStyle} value={editing.contato} onChange={(e) => setEditing({ ...editing, contato: e.target.value })} />
           </Field>
-          <Field label="Texto da mensagem">
-            <textarea style={{ ...iStyle, resize: "vertical" }} rows={8} value={editing.corpo} onChange={(e) => setEditing({ ...editing, corpo: e.target.value })} />
-          </Field>
-          <div style={{ fontSize: 11.5, color: P.inkSoft, marginBottom: 10 }}>
-            Variáveis disponíveis: {"{nome}"} · {"{responsavel}"} · {"{data}"} · {"{hora}"}
-          </div>
-          <Btn onClick={() => save(editing)} style={{ width: "100%" }}>Salvar template</Btn>
+          <Btn onClick={() => saveEdit(editing)} style={{ width: "100%", marginTop: 6 }}>Salvar</Btn>
         </Modal>
       )}
     </div>
   );
 }
 
-// ─────────────────────────────────────────
-// RESUMO TAB
-// ─────────────────────────────────────────
-function ResumoTab({ resumo, totalGeral }) {
-  const [sort, setSort] = useState("valorVendido");
-  const sorted = [...resumo].sort((a, b) => b[sort] - a[sort]);
-
+// ---------------- Modal ----------------
+function Modal({ children, onClose, title }) {
   return (
-    <div style={{ paddingTop: 8 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
-        <Card style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 10, color: P.inkSoft }}>Valor vendido</div>
-          <div style={{ fontSize: 16, fontWeight: 800, color: P.wine }}>{brl(totalGeral.valorVendido)}</div>
-        </Card>
-        <Card style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 10, color: P.inkSoft }}>A receber</div>
-          <div style={{ fontSize: 16, fontWeight: 800, color: P.ok }}>{brl(totalGeral.aReceber)}</div>
-        </Card>
-        <Card style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 10, color: P.inkSoft }}>Pendente</div>
-          <div style={{ fontSize: 16, fontWeight: 800, color: P.pending }}>{brl(totalGeral.pendente)}</div>
-        </Card>
-      </div>
-
-      <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-        {[["valorVendido","Vendido"],["aReceber","A receber"],["estoqueAtual","Estoque"]].map(([k, l]) => (
-          <button key={k} onClick={() => setSort(k)} style={{ flex: 1, padding: "6px 0", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 600, background: sort === k ? P.wine : P.card, color: sort === k ? "#fff" : P.inkSoft, boxShadow: sort === k ? "none" : `inset 0 0 0 1px ${P.line}` }}>
-            {l}
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(44,36,34,0.45)", display: "flex",
+        alignItems: "flex-end", justifyContent: "center", zIndex: 50,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: PALETTE.card, width: "100%", maxWidth: 720, borderRadius: "18px 18px 0 0",
+          padding: 20, maxHeight: "88vh", overflowY: "auto", boxShadow: "0 -8px 30px rgba(0,0,0,0.15)",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div style={{ fontWeight: 700, fontSize: 16, color: PALETTE.wine }}>{title}</div>
+          <button onClick={onClose} style={{ background: "transparent", border: "none", cursor: "pointer", color: PALETTE.inkSoft }}>
+            <X size={20} />
           </button>
-        ))}
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {sorted.map((r) => (
-          <Card key={r.id}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 14 }}>{r.nome}</div>
-                <div style={{ fontSize: 12, color: P.inkSoft }}>{r.tipo} · {r.visitas} visita(s)</div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontWeight: 800, fontSize: 15, color: P.wine }}>{brl(r.valorVendido)}</div>
-                <div style={{ fontSize: 11, color: P.inkSoft }}>vendido</div>
-              </div>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
-              <MiniStat label="A receber" value={brl(r.aReceber)} color={P.ok} />
-              <MiniStat label="Comissão" value={brl(r.valorComissao)} />
-              <MiniStat label="Estoque" value={`${r.estoqueAtual} un.`} color={r.estoqueAtual <= 5 ? P.pending : P.ok} />
-            </div>
-            {r.pendente > 0 && (
-              <div style={{ fontSize: 11.5, color: P.pending, marginTop: 8, fontWeight: 600 }}>
-                ⚠️ {brl(r.pendente)} pendente de recebimento
-              </div>
-            )}
-          </Card>
-        ))}
-        {resumo.length === 0 && (
-          <Card style={{ textAlign: "center", color: P.inkSoft, fontSize: 13 }}>
-            Nenhum comércio com lançamentos ainda.
-          </Card>
-        )}
+        </div>
+        {children}
       </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────
-// RECIBO MODAL
-// ─────────────────────────────────────────
+// ---------------- Recibo ----------------
 function ReciboModal({ entrega, comercio, onClose }) {
   const reciboRef = useRef(null);
   const [busy, setBusy] = useState(false);
-  const [err, setErr]   = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
 
   const estoqueRestante =
     Number(entrega.estoqueAnterior || 0) + Number(entrega.qtdReposta || 0) -
     Number(entrega.qtdVendida || 0) - Number(entrega.qtdRecolhida || 0);
   const valorVendido = Number(entrega.qtdVendida || 0) * Number(entrega.preco || 0);
-  const numRecibo = `${(entrega.data || "").replaceAll("-", "")}-${entrega.id?.slice(0, 5)}`;
+  const numeroRecibo = `${(entrega.data || "").replaceAll("-", "")}-${entrega.id}`;
 
-  async function gerarBlob() {
+  async function gerarImagem() {
     const canvas = await html2canvas(reciboRef.current, { scale: 3, backgroundColor: "#FFFFFF" });
-    return new Promise((res) => canvas.toBlob((b) => res(b), "image/png"));
+    return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), "image/png"));
   }
+
   async function compartilhar() {
-    setBusy(true); setErr("");
+    setBusy(true);
+    setErrorMsg("");
     try {
-      const blob = await gerarBlob();
-      const file = new File([blob], `recibo-${numRecibo}.png`, { type: "image/png" });
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: "Recibo Boom Algodão Doce" });
+      const blob = await gerarImagem();
+      const file = new File([blob], `recibo-${numeroRecibo}.png`, { type: "image/png" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: "Recibo Boom Algodão Doce",
+          text: `Recibo de consignação — ${comercio?.nome || ""} — ${fmtDate(entrega.data)}`,
+        });
       } else {
-        baixar(blob);
-        wppTexto();
+        // navegador sem suporte a compartilhar arquivo: baixa a imagem e abre o WhatsApp com o texto
+        baixarBlob(blob);
+        abrirWhatsAppTexto();
       }
-    } catch (e) {
-      if (e?.name !== "AbortError") setErr("Não foi possível compartilhar. Use 'Baixar imagem' e envie manualmente.");
+    } catch (err) {
+      if (err?.name !== "AbortError") {
+        setErrorMsg("Não foi possível compartilhar automaticamente. Use \"Baixar imagem\" e envie manualmente.");
+      }
     } finally {
       setBusy(false);
     }
   }
-  function baixar(blob) {
+
+  function baixarBlob(blob) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `recibo-${numRecibo}.png`;
-    document.body.appendChild(a); a.click(); a.remove();
+    a.href = url;
+    a.download = `recibo-${numeroRecibo}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
     URL.revokeObjectURL(url);
   }
+
   async function baixarImagem() {
     setBusy(true);
-    try { const b = await gerarBlob(); baixar(b); }
-    finally { setBusy(false); }
+    try {
+      const blob = await gerarImagem();
+      baixarBlob(blob);
+    } finally {
+      setBusy(false);
+    }
   }
-  function wppTexto() {
+
+  function abrirWhatsAppTexto() {
     const linhas = [
-      `*Recibo Boom Algodão Doce* #${numRecibo}`,
+      `*Recibo Boom Algodão Doce* #${numeroRecibo}`,
       `Comércio: ${comercio?.nome || "-"}`,
       `Data: ${fmtDate(entrega.data)}`,
       `Estoque anterior: ${entrega.estoqueAnterior} un.`,
-      `Reposto: ${entrega.qtdReposta} un.`,
-      `Vendido: ${entrega.qtdVendida} un.`,
-      `Recolhido: ${entrega.qtdRecolhida || 0} un.`,
-      `Estoque atual: ${estoqueRestante} un.`,
+      `Reposto agora: ${entrega.qtdReposta} un.`,
+      `Vendido desde última visita: ${entrega.qtdVendida} un.`,
+      `Recolhido agora: ${entrega.qtdRecolhida || 0} un.`,
+      `Estoque atual no ponto: ${estoqueRestante} un.`,
       `Valor vendido: ${brl(valorVendido)}`,
-    ].join("\n");
-    const num = digits(comercio?.contato || "");
-    window.open(`${num ? `https://wa.me/55${num}` : "https://wa.me/"}?text=${encMsg(linhas)}`, "_blank");
+      entrega.recebidoPor ? `Recebido por: ${entrega.recebidoPor}` : null,
+    ].filter(Boolean).join("\n");
+    const contato = (comercio?.contato || "").replace(/\D/g, "");
+    const base = contato ? `https://wa.me/55${contato}` : "https://wa.me/";
+    window.open(`${base}?text=${encodeURIComponent(linhas)}`, "_blank");
   }
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(44,36,34,0.55)", display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 60 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: P.bg, width: "100%", maxWidth: 720, borderRadius: "18px 18px 0 0", padding: 18, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 -8px 30px rgba(0,0,0,0.2)" }}>
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(44,36,34,0.55)", display: "flex",
+        alignItems: "flex-end", justifyContent: "center", zIndex: 60,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: PALETTE.bg, width: "100%", maxWidth: 720, borderRadius: "18px 18px 0 0",
+          padding: 18, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 -8px 30px rgba(0,0,0,0.2)",
+        }}
+      >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <div style={{ fontWeight: 700, fontSize: 16, color: P.wine, display: "flex", alignItems: "center", gap: 8 }}><Receipt size={18} /> Recibo</div>
-          <button onClick={onClose} style={{ background: "transparent", border: "none", cursor: "pointer", color: P.inkSoft }}><X size={20} /></button>
+          <div style={{ fontWeight: 700, fontSize: 16, color: PALETTE.wine, display: "flex", alignItems: "center", gap: 8 }}>
+            <Receipt size={18} /> Recibo de consignação
+          </div>
+          <button onClick={onClose} style={{ background: "transparent", border: "none", cursor: "pointer", color: PALETTE.inkSoft }}>
+            <X size={20} />
+          </button>
         </div>
 
-        {/* Recibo imprimível */}
+        {/* área que vira a imagem do recibo */}
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}>
-          <div ref={reciboRef} style={{ width: 360, background: "#FFFFFF", borderRadius: 10, border: `1px solid ${P.line}`, padding: 20, fontFamily: "'Segoe UI', system-ui, sans-serif", color: P.ink }}>
+          <div
+            ref={reciboRef}
+            style={{
+              width: 380, background: "#FFFFFF", borderRadius: 10, border: `1px solid ${PALETTE.line}`,
+              padding: 20, fontFamily: "'Segoe UI', system-ui, sans-serif", color: PALETTE.ink,
+            }}
+          >
             <div style={{ textAlign: "center", marginBottom: 10 }}>
-              <div style={{ fontFamily: "Georgia, serif", fontWeight: 800, fontSize: 20, color: P.wine }}>BOOM! Algodão Doce</div>
-              <div style={{ fontSize: 10, color: P.inkSoft }}>S&B Soluções Integradas · Caraguatatuba/SP</div>
-              <div style={{ fontSize: 10, color: P.inkSoft }}>WhatsApp (12) 99606-3582</div>
+              <div style={{ fontFamily: "Georgia, serif", fontWeight: 800, fontSize: 20, color: PALETTE.wine }}>
+                BOOM! Algodão Doce
+              </div>
+              <div style={{ fontSize: 10.5, color: PALETTE.inkSoft }}>S&amp;B Soluções Integradas · Caraguatatuba/SP</div>
+              <div style={{ fontSize: 10.5, color: PALETTE.inkSoft }}>WhatsApp (12) 99606-3582</div>
             </div>
-            <div style={{ borderTop: `1px dashed ${P.line}`, borderBottom: `1px dashed ${P.line}`, padding: "8px 0", margin: "8px 0" }}>
-              <div style={{ fontSize: 10.5, color: P.inkSoft }}>Recibo nº {numRecibo}</div>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>{comercio?.nome || "Comércio"}</div>
-              {comercio?.endereco && <div style={{ fontSize: 10.5, color: P.inkSoft }}>{comercio.endereco}</div>}
-              <div style={{ fontSize: 10.5, color: P.inkSoft }}>Data: {fmtDate(entrega.data)}</div>
+            <div style={{ borderTop: `1px dashed ${PALETTE.line}`, borderBottom: `1px dashed ${PALETTE.line}`, padding: "8px 0", margin: "8px 0" }}>
+              <div style={{ fontSize: 11, color: PALETTE.inkSoft }}>Recibo nº {numeroRecibo}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginTop: 2 }}>{comercio?.nome || "Comércio não identificado"}</div>
+              {comercio?.endereco && <div style={{ fontSize: 11, color: PALETTE.inkSoft }}>{comercio.endereco}</div>}
+              <div style={{ fontSize: 11, color: PALETTE.inkSoft, marginTop: 2 }}>Data: {fmtDate(entrega.data)}</div>
             </div>
+
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <tbody>
-                {[
-                  ["Estoque anterior", `${entrega.estoqueAnterior} un.`, false],
-                  ["Reposto nesta visita", `${entrega.qtdReposta} un.`, true],
-                  ["Vendido desde última visita", `${entrega.qtdVendida} un.`, false],
-                  ["Recolhido nesta visita", `${entrega.qtdRecolhida || 0} un.`, false],
-                  ["Estoque atual no ponto", `${estoqueRestante} un.`, true],
-                ].map(([l, v, b]) => (
-                  <tr key={l}>
-                    <td style={{ padding: "3px 0", color: b ? P.ink : P.inkSoft, fontWeight: b ? 700 : 400 }}>{l}</td>
-                    <td style={{ padding: "3px 0", textAlign: "right", fontWeight: b ? 700 : 400 }}>{v}</td>
-                  </tr>
-                ))}
+                <RLinha label="Estoque anterior no ponto" value={`${entrega.estoqueAnterior} un.`} />
+                <RLinha label="Reposto nesta visita" value={`${entrega.qtdReposta} un.`} bold />
+                <RLinha label="Vendido desde a última visita" value={`${entrega.qtdVendida} un.`} />
+                <RLinha label="Recolhido nesta visita" value={`${entrega.qtdRecolhida || 0} un.`} />
+                <RLinha label="Estoque atual no ponto" value={`${estoqueRestante} un.`} bold />
               </tbody>
             </table>
-            <div style={{ borderTop: `1px dashed ${P.line}`, marginTop: 10, paddingTop: 10 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                <span>Valor vendido</span><span style={{ fontWeight: 700 }}>{brl(valorVendido)}</span>
+
+            <div style={{ borderTop: `1px dashed ${PALETTE.line}`, marginTop: 10, paddingTop: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
+                <span>Valor vendido no período</span>
+                <span style={{ fontWeight: 700 }}>{brl(valorVendido)}</span>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5, color: P.inkSoft, marginTop: 2 }}>
-                <span>Status</span><span>{entrega.status}</span>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: PALETTE.inkSoft, marginTop: 2 }}>
+                <span>Status do pagamento</span>
+                <span>{entrega.status}</span>
               </div>
             </div>
-            {entrega.recebidoPor && <div style={{ marginTop: 10, fontSize: 11 }}>Recebido por: <strong>{entrega.recebidoPor}</strong></div>}
-            {entrega.obs && <div style={{ marginTop: 4, fontSize: 10.5, color: P.inkSoft, fontStyle: "italic" }}>{entrega.obs}</div>}
-            <div style={{ textAlign: "center", fontSize: 9, color: P.inkSoft, marginTop: 12 }}>Documento de controle interno de consignação — não é nota fiscal.</div>
+
+            {entrega.recebidoPor && (
+              <div style={{ marginTop: 12, fontSize: 11.5 }}>Recebido por: <strong>{entrega.recebidoPor}</strong></div>
+            )}
+            {entrega.obs && <div style={{ marginTop: 4, fontSize: 11, color: PALETTE.inkSoft, fontStyle: "italic" }}>{entrega.obs}</div>}
+
+            <div style={{ textAlign: "center", fontSize: 9.5, color: PALETTE.inkSoft, marginTop: 14 }}>
+              Documento de controle interno de consignação — não é nota fiscal.
+            </div>
           </div>
         </div>
 
-        {err && <div style={{ background: P.pendingSoft, color: P.pending, borderRadius: 10, padding: "8px 12px", fontSize: 12.5, marginBottom: 10 }}>{err}</div>}
+        {errorMsg && (
+          <div style={{ background: PALETTE.pendingSoft, color: PALETTE.pending, borderRadius: 10, padding: "8px 12px", fontSize: 12.5, marginBottom: 10 }}>
+            {errorMsg}
+          </div>
+        )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <Btn onClick={compartilhar} style={{ width: "100%" }}><Share2 size={14} /> {busy ? "Preparando..." : "Compartilhar (WhatsApp / outros)"}</Btn>
+          <Btn onClick={compartilhar} style={{ width: "100%" }}>
+            <Share2 size={15} /> {busy ? "Preparando..." : "Compartilhar agora (WhatsApp / outros)"}
+          </Btn>
           <div style={{ display: "flex", gap: 8 }}>
-            <Btn variant="subtle" onClick={wppTexto} style={{ flex: 1 }}><MessageCircle size={13} /> WPP texto</Btn>
-            <Btn variant="ghost" onClick={baixarImagem} style={{ flex: 1 }}><Download size={13} /> Baixar</Btn>
+            <Btn variant="subtle" onClick={abrirWhatsAppTexto} style={{ flex: 1 }}>
+              <MessageCircle size={14} /> WhatsApp (texto)
+            </Btn>
+            <Btn variant="ghost" onClick={baixarImagem} style={{ flex: 1 }}>
+              <Download size={14} /> Baixar imagem
+            </Btn>
           </div>
+        </div>
+        <div style={{ fontSize: 10.5, color: PALETTE.inkSoft, textAlign: "center", marginTop: 8 }}>
+          "Compartilhar agora" abre o menu nativo do celular — escolha o WhatsApp do cliente na hora.
         </div>
       </div>
     </div>
+  );
+}
+
+function RLinha({ label, value, bold }) {
+  return (
+    <tr>
+      <td style={{ padding: "3px 0", color: bold ? PALETTE.ink : PALETTE.inkSoft, fontWeight: bold ? 700 : 400 }}>{label}</td>
+      <td style={{ padding: "3px 0", textAlign: "right", fontWeight: bold ? 700 : 400 }}>{value}</td>
+    </tr>
   );
 }
