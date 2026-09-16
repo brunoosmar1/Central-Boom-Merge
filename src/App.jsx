@@ -392,7 +392,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: PALETTE.bg, fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif", color: PALETTE.ink, paddingBottom: 90 }}>
+    <div style={{ minHeight: "100vh", background: PALETTE.bg, fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif", color: PALETTE.ink, paddingBottom: "calc(90px + env(safe-area-inset-bottom))" }}>
       <Header offline={offline} onRefresh={recarregar} configured={SUPABASE_CONFIGURED} />
       {!loaded && (
         <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
@@ -447,7 +447,7 @@ export default function App() {
 
 function Header({ offline, onRefresh, configured }) {
   return (
-    <div style={{ padding: "22px 16px 14px", textAlign: "center", position: "relative" }}>
+    <div style={{ padding: "calc(env(safe-area-inset-top) + 22px) 16px 14px", textAlign: "center", position: "relative" }}>
       <div style={{ fontSize: 12, letterSpacing: 1.5, textTransform: "uppercase", color: PALETTE.gold, fontWeight: 700 }}>
         Boom Algodão Doce
       </div>
@@ -459,8 +459,9 @@ function Header({ offline, onRefresh, configured }) {
           onClick={onRefresh}
           title="Atualizar dados do servidor"
           style={{
-            position: "absolute", top: 20, right: 16, background: "transparent", border: "none",
-            cursor: "pointer", color: PALETTE.inkSoft, display: "flex", alignItems: "center", gap: 4,
+            position: "absolute", top: "calc(env(safe-area-inset-top) + 8px)", right: 8, background: "transparent", border: "none",
+            cursor: "pointer", color: PALETTE.inkSoft, display: "flex", alignItems: "center", justifyContent: "center",
+            width: 44, height: 44, touchAction: "manipulation",
           }}
         >
           <RefreshCw size={16} />
@@ -488,7 +489,7 @@ function TabBar({ tab, setTab }) {
     <div style={{
       position: "fixed", bottom: 0, left: 0, right: 0, background: PALETTE.card,
       borderTop: `1px solid ${PALETTE.line}`, display: "flex", justifyContent: "center",
-      boxShadow: "0 -4px 16px rgba(0,0,0,0.04)",
+      boxShadow: "0 -4px 16px rgba(0,0,0,0.04)", paddingBottom: "env(safe-area-inset-bottom)",
     }}>
       <div style={{ display: "flex", width: "100%", maxWidth: 720 }}>
         {items.map((it) => {
@@ -500,8 +501,8 @@ function TabBar({ tab, setTab }) {
               onClick={() => setTab(it.id)}
               style={{
                 flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
-                padding: "10px 0 12px", background: "transparent", border: "none", cursor: "pointer",
-                color: active ? PALETTE.wine : PALETTE.inkSoft,
+                padding: "10px 0 12px", minHeight: 44, background: "transparent", border: "none", cursor: "pointer",
+                color: active ? PALETTE.wine : PALETTE.inkSoft, touchAction: "manipulation",
               }}
             >
               <Icon size={18} strokeWidth={active ? 2.4 : 2} />
@@ -533,7 +534,7 @@ function Field({ label, children }) {
 
 const inputStyle = {
   width: "100%", padding: "9px 10px", borderRadius: 9, border: `1px solid ${PALETTE.line}`,
-  fontSize: 14, background: "#FDFAF8", color: PALETTE.ink, boxSizing: "border-box",
+  fontSize: 16, background: "#FDFAF8", color: PALETTE.ink, boxSizing: "border-box",
 };
 
 function Btn({ children, onClick, variant = "primary", style, type = "button" }) {
@@ -548,8 +549,8 @@ function Btn({ children, onClick, variant = "primary", style, type = "button" })
       onClick={onClick}
       style={{
         display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
-        padding: "9px 14px", borderRadius: 10, border: "none", fontSize: 13.5, fontWeight: 600,
-        cursor: "pointer", ...variants[variant], ...style,
+        padding: "9px 14px", minHeight: 40, borderRadius: 10, border: "none", fontSize: 13.5, fontWeight: 600,
+        cursor: "pointer", touchAction: "manipulation", ...variants[variant], ...style,
       }}
     >
       {children}
@@ -929,7 +930,7 @@ function PainelTab({ prospectos, comercios, resumo, totalGeral, entregas, metaVi
             type="number"
             value={metaVisitas}
             onChange={(e) => setMetaVisitas(e.target.value)}
-            style={{ width: 56, textAlign: "center", padding: "4px 6px", borderRadius: 8, border: `1px solid ${PALETTE.line}`, fontSize: 13 }}
+            style={{ width: 64, textAlign: "center", padding: "6px 6px", borderRadius: 8, border: `1px solid ${PALETTE.line}`, fontSize: 16 }}
           />
         </div>
         <div style={{ background: PALETTE.bg, borderRadius: 999, height: 10, marginTop: 10, overflow: "hidden" }}>
@@ -1116,7 +1117,7 @@ function ProspeccaoTab({ prospectos, setProspectos, onCriarComercio }) {
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             placeholder="Buscar por nome ou cidade"
-            style={{ border: "none", outline: "none", fontSize: 13, flex: 1, background: "transparent" }}
+            style={{ border: "none", outline: "none", fontSize: 16, flex: 1, background: "transparent" }}
           />
         </div>
       </div>

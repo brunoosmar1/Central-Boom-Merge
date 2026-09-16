@@ -2,10 +2,25 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
     <title>Controle de Consignado — Boom Algodão Doce</title>
+    <meta name="description" content="Sistema de gestão de consignação, prospecção e roteiro para a Boom Algodão Doce." />
+    <meta name="theme-color" content="#8E2A4B" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Central Boom" />
+    <style>
+      * { -webkit-tap-highlight-color: transparent; }
+      html { -webkit-text-size-adjust: 100%; }
+      html, body { margin: 0; overscroll-behavior-y: contain; overflow-x: hidden; }
+      button, input, a { touch-action: manipulation; }
+    </style>
   </head>
-  <body style="margin:0">
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

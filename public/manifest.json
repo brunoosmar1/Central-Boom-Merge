@@ -1,0 +1,17 @@
+{
+  "name": "Boom Algodão Doce — Central de Gestão",
+  "short_name": "Central Boom",
+  "description": "Sistema de gestão de consignação, prospecção e roteiro para a Boom Algodão Doce.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FBF6F2",
+  "theme_color": "#8E2A4B",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
