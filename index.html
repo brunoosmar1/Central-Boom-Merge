@@ -18,6 +18,12 @@
       html { -webkit-text-size-adjust: 100%; }
       html, body { margin: 0; overscroll-behavior-y: contain; overflow-x: hidden; }
       button, input, a { touch-action: manipulation; }
+      button:active { transform: scale(0.97); }
+      button, input, select, textarea, a { transition: transform 0.12s ease, background 0.15s ease, box-shadow 0.15s ease; }
+      button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible {
+        outline: 2px solid #8E2A4B; outline-offset: 2px;
+      }
+      .search-pill:focus-within { box-shadow: 0 0 0 2px #8E2A4B; border-color: transparent !important; }
     </style>
   </head>
   <body>

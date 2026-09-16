@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   Store, Package, BarChart3, Plus, Trash2, Check, Clock, X, Receipt, Share2, Download, MessageCircle,
   LayoutDashboard, Target, Search, Phone, MapPin, ArrowRight, Star, TrendingUp, Users, Loader2, RefreshCw,
+  ChevronRight, Wallet,
 } from "lucide-react";
 import html2canvas from "html2canvas";
 import { supabase, SUPABASE_CONFIGURED } from "./supabaseClient";
@@ -206,6 +207,7 @@ const PALETTE = {
   ink: "#2C2422",
   inkSoft: "#7A6E68",
   line: "#EDE2DA",
+  lineSoft: "#F1E6DE",
   wine: "#8E2A4B",
   wineSoft: "#F4E4EA",
   gold: "#B98A3E",
@@ -446,32 +448,47 @@ export default function App() {
 }
 
 function Header({ offline, onRefresh, configured }) {
+  const statusLabel = !configured ? "Local" : offline ? "Offline" : "Online";
+  const statusColor = !configured || offline ? PALETTE.pending : PALETTE.ok;
   return (
-    <div style={{ padding: "calc(env(safe-area-inset-top) + 22px) 16px 14px", textAlign: "center", position: "relative" }}>
-      <div style={{ fontSize: 12, letterSpacing: 1.5, textTransform: "uppercase", color: PALETTE.gold, fontWeight: 700 }}>
-        Boom Algodão Doce
-      </div>
-      <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 26, fontWeight: 700, color: PALETTE.wine, marginTop: 2 }}>
-        Central de Gestão
+    <div style={{
+      padding: "calc(env(safe-area-inset-top) + 14px) 16px 14px", display: "flex", alignItems: "center", gap: 11,
+      borderBottom: `1px solid ${PALETTE.lineSoft}`,
+    }}>
+      <img
+        src="/icon-192.png" alt="" width={38} height={38}
+        style={{ borderRadius: 11, boxShadow: "0 2px 6px rgba(142,42,75,0.25)", flexShrink: 0 }}
+      />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.4, textTransform: "uppercase", color: PALETTE.gold }}>
+          Boom Algodão Doce
+        </div>
+        <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 18, fontWeight: 700, color: PALETTE.wine, marginTop: 1 }}>
+          Central de Gestão
+        </div>
       </div>
       {configured && (
         <button
           onClick={onRefresh}
           title="Atualizar dados do servidor"
           style={{
-            position: "absolute", top: "calc(env(safe-area-inset-top) + 8px)", right: 8, background: "transparent", border: "none",
-            cursor: "pointer", color: PALETTE.inkSoft, display: "flex", alignItems: "center", justifyContent: "center",
-            width: 44, height: 44, touchAction: "manipulation",
+            background: "transparent", border: "none", cursor: "pointer", color: PALETTE.inkSoft,
+            display: "flex", alignItems: "center", justifyContent: "center", width: 36, height: 36,
+            touchAction: "manipulation", flexShrink: 0,
           }}
         >
           <RefreshCw size={16} />
         </button>
       )}
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 5, marginTop: 6 }}>
-        <span style={{ width: 7, height: 7, borderRadius: 999, background: offline ? PALETTE.pending : PALETTE.ok, display: "inline-block" }} />
-        <span style={{ fontSize: 10.5, color: PALETTE.inkSoft }}>
-          {!configured ? "Somente neste aparelho (banco não configurado)" : offline ? "Sem conexão — usando dados salvos neste aparelho" : "Sincronizado"}
-        </span>
+      <div
+        title={offline ? "Sem conexão — usando dados salvos neste aparelho" : undefined}
+        style={{
+          display: "flex", alignItems: "center", gap: 5, background: PALETTE.wineSoft, borderRadius: 999,
+          padding: "6px 10px", flexShrink: 0,
+        }}
+      >
+        <span style={{ width: 6, height: 6, borderRadius: 999, background: statusColor, flexShrink: 0 }} />
+        <span style={{ fontSize: 10, fontWeight: 700, color: PALETTE.wine, whiteSpace: "nowrap" }}>{statusLabel}</span>
       </div>
     </div>
   );
@@ -501,11 +518,16 @@ function TabBar({ tab, setTab }) {
               onClick={() => setTab(it.id)}
               style={{
                 flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
-                padding: "10px 0 12px", minHeight: 44, background: "transparent", border: "none", cursor: "pointer",
+                padding: "9px 0 10px", minHeight: 44, background: "transparent", border: "none", cursor: "pointer",
                 color: active ? PALETTE.wine : PALETTE.inkSoft, touchAction: "manipulation",
               }}
             >
-              <Icon size={18} strokeWidth={active ? 2.4 : 2} />
+              <span style={{
+                width: 40, height: 26, borderRadius: 11, background: active ? PALETTE.wineSoft : "transparent",
+                display: "flex", alignItems: "center", justifyContent: "center", transition: "background .15s",
+              }}>
+                <Icon size={18} strokeWidth={active ? 2.4 : 2} />
+              </span>
               <span style={{ fontSize: 9.5, fontWeight: active ? 700 : 500 }}>{it.label}</span>
             </button>
           );
@@ -517,7 +539,13 @@ function TabBar({ tab, setTab }) {
 
 function Card({ children, style }) {
   return (
-    <div style={{ background: PALETTE.card, borderRadius: 14, border: `1px solid ${PALETTE.line}`, padding: 16, ...style }}>
+    <div
+      style={{
+        background: PALETTE.card, borderRadius: 16, border: `1px solid ${PALETTE.lineSoft}`, padding: 16,
+        boxShadow: "0 1px 2px rgba(44,36,34,0.03), 0 8px 20px rgba(142,42,75,0.045)",
+        ...style,
+      }}
+    >
       {children}
     </div>
   );
@@ -613,9 +641,19 @@ function ComerciosTab({ comercios, setComercios, entregasCount }) {
               <div>
                 <div style={{ fontWeight: 700, fontSize: 15 }}>{c.nome}</div>
                 <div style={{ fontSize: 12.5, color: PALETTE.inkSoft, marginTop: 2 }}>{c.tipo} · comissão {c.comissaoPct}%</div>
-                {c.endereco && <div style={{ fontSize: 12.5, color: PALETTE.inkSoft, marginTop: 2 }}>{c.endereco}</div>}
-                {c.responsavel && <div style={{ fontSize: 12.5, color: PALETTE.inkSoft }}>Responsável: {c.responsavel} {c.contato && `· ${c.contato}`}</div>}
-                <div style={{ fontSize: 11.5, color: PALETTE.inkSoft, marginTop: 4 }}>{entregasCount(c.id)} lançamento(s) registrado(s)</div>
+                {c.endereco && (
+                  <div style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 4, display: "flex", alignItems: "center", gap: 4 }}>
+                    <MapPin size={11} /> {c.endereco}
+                  </div>
+                )}
+                {c.responsavel && (
+                  <div style={{ fontSize: 12, color: PALETTE.inkSoft, marginTop: 2, display: "flex", alignItems: "center", gap: 4 }}>
+                    <Users size={11} /> {c.responsavel} {c.contato && `· ${c.contato}`}
+                  </div>
+                )}
+                <div style={{ fontSize: 11.5, color: PALETTE.inkSoft, marginTop: 4, display: "flex", alignItems: "center", gap: 4 }}>
+                  <Package size={11} /> {entregasCount(c.id)} lançamento(s) registrado(s)
+                </div>
               </div>
               <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999, background: statusBg(c.status), color: statusColor(c.status), whiteSpace: "nowrap" }}>
                 {c.status}
@@ -815,8 +853,23 @@ function Metric({ label, value }) {
   return (
     <div style={{ background: PALETTE.bg, borderRadius: 8, padding: "6px 9px" }}>
       <div style={{ fontSize: 10.5, color: PALETTE.inkSoft }}>{label}</div>
-      <div style={{ fontWeight: 700 }}>{value}</div>
+      <div style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{value}</div>
     </div>
+  );
+}
+
+function KpiTile({ icon: Icon, tint, label, value }) {
+  return (
+    <Card style={{ padding: 15 }}>
+      <div style={{
+        width: 32, height: 32, borderRadius: 9, background: PALETTE[`${tint}Soft`],
+        display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10,
+      }}>
+        <Icon size={16} color={PALETTE[tint]} />
+      </div>
+      <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 19, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      <div style={{ fontSize: 11, color: PALETTE.inkSoft, marginTop: 2 }}>{label}</div>
+    </Card>
   );
 }
 
@@ -942,18 +995,20 @@ function PainelTab({ prospectos, comercios, resumo, totalGeral, entregas, metaVi
       </Card>
 
       {/* taxa de conversão */}
-      <Card style={{ marginBottom: 12, background: PALETTE.wine, border: "none" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <Card style={{ marginBottom: 12, background: PALETTE.wine, border: "none", boxShadow: "0 10px 24px rgba(142,42,75,0.28)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
             <div style={{ fontSize: 11, color: PALETTE.wineSoft, textTransform: "uppercase", letterSpacing: 1 }}>Taxa de conversão</div>
-            <div style={{ fontSize: 30, fontWeight: 800, color: "#fff", marginTop: 4 }}>
+            <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontVariantNumeric: "tabular-nums", fontSize: 32, fontWeight: 700, color: "#fff", marginTop: 4, lineHeight: 1 }}>
               {taxaConversao === null ? "—" : `${Math.round(taxaConversao * 100)}%`}
             </div>
-            <div style={{ fontSize: 11.5, color: PALETTE.wineSoft, marginTop: 2 }}>
+            <div style={{ fontSize: 11.5, color: PALETTE.wineSoft, marginTop: 6 }}>
               {counts["Fechado"]} fechados de {totalTrabalhado} visitados
             </div>
           </div>
-          <TrendingUp size={34} color="#F6ECD9" />
+          <div style={{ width: 44, height: 44, borderRadius: 12, background: "rgba(255,255,255,0.14)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <TrendingUp size={22} color="#F6ECD9" />
+          </div>
         </div>
       </Card>
 
@@ -961,18 +1016,28 @@ function PainelTab({ prospectos, comercios, resumo, totalGeral, entregas, metaVi
       <div style={{ fontWeight: 700, fontSize: 13, color: PALETTE.inkSoft, margin: "4px 0 8px", textTransform: "uppercase", letterSpacing: 0.5 }}>
         Funil de prospecção
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
-        {PROSPECT_STATUS.map((s) => (
-          <button key={s} onClick={() => goTo("prospeccao")} style={{ all: "unset", cursor: "pointer" }}>
-            <Card style={{ padding: "10px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 13, color: PALETTE.ink }}>{s}</span>
-              <span style={{
-                fontSize: 13, fontWeight: 700, color: PALETTE[PROSPECT_STATUS_COLOR[s]] || PALETTE.ink,
-                background: PALETTE.bg, borderRadius: 999, padding: "2px 12px",
-              }}>{counts[s] || 0}</span>
-            </Card>
-          </button>
-        ))}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+        {PROSPECT_STATUS.map((s) => {
+          const dotColor = PALETTE[PROSPECT_STATUS_COLOR[s]] || PALETTE.inkSoft;
+          const softColor = PALETTE[`${PROSPECT_STATUS_COLOR[s]}Soft`] || PALETTE.bg;
+          return (
+            <button key={s} onClick={() => goTo("prospeccao")} style={{ all: "unset", cursor: "pointer" }}>
+              <Card style={{ padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, color: PALETTE.ink }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 999, background: dotColor, flexShrink: 0 }} />
+                  {s}
+                </span>
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{
+                    fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: dotColor,
+                    background: softColor, borderRadius: 999, padding: "2px 12px",
+                  }}>{counts[s] || 0}</span>
+                  <ChevronRight size={15} color={PALETTE.line} />
+                </span>
+              </Card>
+            </button>
+          );
+        })}
       </div>
 
       {/* resumo geral */}
@@ -980,10 +1045,10 @@ function PainelTab({ prospectos, comercios, resumo, totalGeral, entregas, metaVi
         Visão geral do consignado
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-        <Card><Metric label="Comércios ativos" value={comerciosAtivos} /></Card>
-        <Card><Metric label="Vendido este mês" value={brl(vendasMes)} /></Card>
-        <Card><Metric label="A receber (total)" value={brl(totalGeral.aReceber)} /></Card>
-        <Card><Metric label="Pendente de pagamento" value={brl(totalGeral.pendente)} /></Card>
+        <KpiTile icon={Store} tint="wine" label="Comércios ativos" value={comerciosAtivos} />
+        <KpiTile icon={TrendingUp} tint="gold" label="Vendido este mês" value={brl(vendasMes)} />
+        <KpiTile icon={Wallet} tint="ok" label="A receber (total)" value={brl(totalGeral.aReceber)} />
+        <KpiTile icon={Clock} tint="pending" label="Pendente de pagamento" value={brl(totalGeral.pendente)} />
       </div>
 
       {/* meta de comércios necessários, com giro real */}
@@ -1111,7 +1176,7 @@ function ProspeccaoTab({ prospectos, setProspectos, onCriarComercio }) {
       </Card>
 
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6, background: PALETTE.card, border: `1px solid ${PALETTE.line}`, borderRadius: 10, padding: "6px 10px" }}>
+        <div className="search-pill" style={{ flex: 1, display: "flex", alignItems: "center", gap: 6, background: PALETTE.card, border: `1px solid ${PALETTE.line}`, borderRadius: 10, padding: "6px 10px" }}>
           <Search size={15} color={PALETTE.inkSoft} />
           <input
             value={busca}

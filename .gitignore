@@ -2,3 +2,8 @@ node_modules
 dist
 .vercel
 .DS_Store
+
+# tooling local de skills de agentes de IA (não faz parte do app)
+.agents
+.claude
+skills-lock.json
