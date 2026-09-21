@@ -90,6 +90,16 @@ export function saveLocal(key, value) {
   }
 }
 
+// Evita que o carregamento fique preso pra sempre numa rede instável: se o
+// Supabase não responder dentro do prazo, trata como falha e cai para o
+// modo offline (dados salvos no aparelho) em vez de travar no carregando.
+export function withTimeout(promise, ms = 10000) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms)),
+  ]);
+}
+
 export async function fetchTable(supabase, table) {
   const { data, error } = await supabase.from(table).select("id, data");
   if (error) throw error;
