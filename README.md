@@ -1,9 +1,20 @@
-# Central de Gestão — Boom Algodão Doce
+# Central de Gestão — Boom
 
-App em React + Vite com tudo em um só lugar: painel de vendas/prospecção,
-prospecção de comércios (com disparo de mensagem de triagem por WhatsApp),
-cadastro de comércios, lançamentos de entrega/venda com recibo em PDF/imagem,
-e resumo com valor a receber e saldo pendente por comércio.
+App em React + Vite com duas áreas, alternadas por um seletor no topo:
+
+- **🎉 Festas** — CRM de festas com foco em estações de comida (algodão
+  doce, pipoca, cachorro-quente, crepe, fondue, açaí, sorvete, Fini):
+  painel com indicadores do mês, agenda com calendário e lista de
+  agendamentos, cadastro de contatos com aviso de aniversário chegando
+  (com mensagem de parabéns pronta pro WhatsApp) e catálogo de estações
+  com preço base.
+- **📦 Consignado** — o controle original de consignação: painel de
+  vendas/prospecção, prospecção de comércios (com disparo de mensagem de
+  triagem por WhatsApp), cadastro de comércios, lançamentos de
+  entrega/venda com recibo em PDF/imagem, e resumo com valor a receber e
+  saldo pendente por comércio.
+
+Cada área tem sua própria barra de abas na parte de baixo da tela.
 
 ## Configurando o banco de dados compartilhado (Supabase)
 
@@ -13,7 +24,10 @@ mesmos dados, em aparelhos diferentes. Para ativar:
 1. Crie uma conta grátis em **supabase.com** e um novo projeto.
 2. No painel do projeto, vá em **SQL Editor → New query**, cole todo o
    conteúdo do arquivo `supabase_schema.sql` (na raiz deste projeto) e
-   clique em **Run**. Isso cria as tabelas necessárias.
+   clique em **Run**. Isso cria as tabelas do módulo de Consignado. Em
+   seguida, rode também o `supabase_add_festas.sql` numa nova query —
+   ele cria as tabelas do módulo de Festas (`clientes`, `eventos` e
+   `estacoes`).
 3. Vá em **Project Settings → API** e copie a **Project URL** e a chave
    **anon public**.
 4. Na Vercel, abra o projeto → **Settings → Environment Variables** e
@@ -114,9 +128,15 @@ Cada recibo já feito pode ser reaberto a qualquer momento pelo botão
 ## Estrutura do projeto
 
 ```
-index.html          — página HTML base
-src/main.jsx         — ponto de entrada do React
-src/App.jsx          — toda a lógica e telas do app
-package.json         — dependências (React + lucide-react)
-vite.config.js       — configuração do Vite
+index.html                — página HTML base
+src/main.jsx               — ponto de entrada do React
+src/App.jsx                — shell: carrega os dados e alterna entre Festas/Consignado
+src/supabaseClient.js      — cliente Supabase compartilhado
+src/shared/                — paleta, componentes de UI e helpers usados pelas duas áreas
+src/festas/                — módulo do CRM de festas (painel, agenda, contatos, estações)
+src/consignado/            — módulo de consignação (painel, prospecção, comércios, lançamentos, resumo)
+supabase_schema.sql        — tabelas do módulo de Consignado
+supabase_add_festas.sql    — tabelas do módulo de Festas
+package.json               — dependências (React + lucide-react + html2canvas)
+vite.config.js              — configuração do Vite
 ```
