@@ -1,7 +1,7 @@
 {
-  "name": "Boom Algodão Doce — Central de Gestão",
+  "name": "Boom — Central de Gestão",
   "short_name": "Central Boom",
-  "description": "Sistema de gestão de consignação, prospecção e roteiro para a Boom Algodão Doce.",
+  "description": "CRM de festas (agenda, contatos, aniversários, estações de comida) e controle de consignação da Boom.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
