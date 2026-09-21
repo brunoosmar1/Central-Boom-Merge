@@ -45,15 +45,17 @@ export default function App() {
         return;
       }
       try {
-        const [c, e, p, cl, ev, es] = await withTimeout(Promise.all([
-          fetchTable(supabase, "comercios"),
-          fetchTable(supabase, "entregas"),
-          fetchTable(supabase, "prospectos"),
-          fetchTable(supabase, "clientes"),
-          fetchTable(supabase, "eventos"),
-          fetchTable(supabase, "estacoes"),
+        const [c, e, p, cl, ev, es] = await withTimeout((signal) => Promise.all([
+          fetchTable(supabase, "comercios", signal),
+          fetchTable(supabase, "entregas", signal),
+          fetchTable(supabase, "prospectos", signal),
+          fetchTable(supabase, "clientes", signal),
+          fetchTable(supabase, "eventos", signal),
+          fetchTable(supabase, "estacoes", signal),
         ]));
-        const { data: settingsRow } = await withTimeout(supabase.from("settings").select("value").eq("key", "metaVisitas").maybeSingle());
+        const { data: settingsRow } = await withTimeout((signal) =>
+          supabase.from("settings").select("value").eq("key", "metaVisitas").abortSignal(signal).maybeSingle()
+        );
         setComerciosState(c);
         setEntregasState(e);
 
@@ -103,15 +105,17 @@ export default function App() {
     if (!SUPABASE_CONFIGURED) return;
     setLoaded(false);
     try {
-      const [c, e, p, cl, ev, es] = await withTimeout(Promise.all([
-        fetchTable(supabase, "comercios"),
-        fetchTable(supabase, "entregas"),
-        fetchTable(supabase, "prospectos"),
-        fetchTable(supabase, "clientes"),
-        fetchTable(supabase, "eventos"),
-        fetchTable(supabase, "estacoes"),
+      const [c, e, p, cl, ev, es] = await withTimeout((signal) => Promise.all([
+        fetchTable(supabase, "comercios", signal),
+        fetchTable(supabase, "entregas", signal),
+        fetchTable(supabase, "prospectos", signal),
+        fetchTable(supabase, "clientes", signal),
+        fetchTable(supabase, "eventos", signal),
+        fetchTable(supabase, "estacoes", signal),
       ]));
-      const { data: settingsRow } = await withTimeout(supabase.from("settings").select("value").eq("key", "metaVisitas").maybeSingle());
+      const { data: settingsRow } = await withTimeout((signal) =>
+        supabase.from("settings").select("value").eq("key", "metaVisitas").abortSignal(signal).maybeSingle()
+      );
       setComerciosState(c);
       setEntregasState(e);
       setProspectosState(p);
@@ -122,6 +126,7 @@ export default function App() {
       setOffline(false);
       setSaveError("");
     } catch {
+      setOffline(true);
       setSaveError("Não foi possível atualizar do servidor agora. Verifique sua internet.");
     } finally {
       setLoaded(true);

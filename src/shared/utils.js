@@ -93,15 +93,24 @@ export function saveLocal(key, value) {
 // Evita que o carregamento fique preso pra sempre numa rede instável: se o
 // Supabase não responder dentro do prazo, trata como falha e cai para o
 // modo offline (dados salvos no aparelho) em vez de travar no carregando.
-export function withTimeout(promise, ms = 10000) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms)),
-  ]);
+// `factory` recebe um AbortSignal que é acionado quando o prazo estoura, para
+// cancelar de fato a requisição em andamento (não só a corrida da Promise).
+export function withTimeout(factory, ms = 10000) {
+  const controller = new AbortController();
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error("timeout"));
+    }, ms);
+  });
+  return Promise.race([factory(controller.signal), timeout]).finally(() => clearTimeout(timer));
 }
 
-export async function fetchTable(supabase, table) {
-  const { data, error } = await supabase.from(table).select("id, data");
+export async function fetchTable(supabase, table, signal) {
+  let query = supabase.from(table).select("id, data");
+  if (signal) query = query.abortSignal(signal);
+  const { data, error } = await query;
   if (error) throw error;
   return data.map((row) => ({ ...row.data, id: row.id }));
 }
