@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Loader2, RefreshCw, PartyPopper, Package } from "lucide-react";
 import { supabase, SUPABASE_CONFIGURED } from "./supabaseClient";
-import { loadLocal, saveLocal, fetchTable, syncTable } from "./shared/utils";
+import { loadLocal, saveLocal, fetchTable, syncTable, withTimeout } from "./shared/utils";
 import { PALETTE } from "./shared/ui";
 import { SEED_PROSPECTOS } from "./consignado/constants";
 import { ESTACOES_PADRAO } from "./festas/constants";
@@ -45,15 +45,17 @@ export default function App() {
         return;
       }
       try {
-        const [c, e, p, cl, ev, es] = await Promise.all([
-          fetchTable(supabase, "comercios"),
-          fetchTable(supabase, "entregas"),
-          fetchTable(supabase, "prospectos"),
-          fetchTable(supabase, "clientes"),
-          fetchTable(supabase, "eventos"),
-          fetchTable(supabase, "estacoes"),
-        ]);
-        const { data: settingsRow } = await supabase.from("settings").select("value").eq("key", "metaVisitas").maybeSingle();
+        const [c, e, p, cl, ev, es] = await withTimeout((signal) => Promise.all([
+          fetchTable(supabase, "comercios", signal),
+          fetchTable(supabase, "entregas", signal),
+          fetchTable(supabase, "prospectos", signal),
+          fetchTable(supabase, "clientes", signal),
+          fetchTable(supabase, "eventos", signal),
+          fetchTable(supabase, "estacoes", signal),
+        ]));
+        const { data: settingsRow } = await withTimeout((signal) =>
+          supabase.from("settings").select("value").eq("key", "metaVisitas").abortSignal(signal).maybeSingle()
+        );
         setComerciosState(c);
         setEntregasState(e);
 
@@ -103,15 +105,17 @@ export default function App() {
     if (!SUPABASE_CONFIGURED) return;
     setLoaded(false);
     try {
-      const [c, e, p, cl, ev, es] = await Promise.all([
-        fetchTable(supabase, "comercios"),
-        fetchTable(supabase, "entregas"),
-        fetchTable(supabase, "prospectos"),
-        fetchTable(supabase, "clientes"),
-        fetchTable(supabase, "eventos"),
-        fetchTable(supabase, "estacoes"),
-      ]);
-      const { data: settingsRow } = await supabase.from("settings").select("value").eq("key", "metaVisitas").maybeSingle();
+      const [c, e, p, cl, ev, es] = await withTimeout((signal) => Promise.all([
+        fetchTable(supabase, "comercios", signal),
+        fetchTable(supabase, "entregas", signal),
+        fetchTable(supabase, "prospectos", signal),
+        fetchTable(supabase, "clientes", signal),
+        fetchTable(supabase, "eventos", signal),
+        fetchTable(supabase, "estacoes", signal),
+      ]));
+      const { data: settingsRow } = await withTimeout((signal) =>
+        supabase.from("settings").select("value").eq("key", "metaVisitas").abortSignal(signal).maybeSingle()
+      );
       setComerciosState(c);
       setEntregasState(e);
       setProspectosState(p);
@@ -122,6 +126,7 @@ export default function App() {
       setOffline(false);
       setSaveError("");
     } catch {
+      setOffline(true);
       setSaveError("Não foi possível atualizar do servidor agora. Verifique sua internet.");
     } finally {
       setLoaded(true);
@@ -168,6 +173,17 @@ export default function App() {
         <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
           <Loader2 className="spin-central" size={26} color={PALETTE.wine} />
           <style>{`.spin-central{animation:spin-central 1s linear infinite}@keyframes spin-central{to{transform:rotate(360deg)}}`}</style>
+        </div>
+      )}
+      {loaded && SUPABASE_CONFIGURED && offline && (
+        <div style={{ margin: "0 16px 12px", padding: "10px 14px", background: PALETTE.pendingSoft, color: PALETTE.pending, borderRadius: 10, fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+          <span>Não conseguiu conectar ao servidor agora — mostrando só os dados salvos neste aparelho.</span>
+          <button
+            onClick={recarregar}
+            style={{ background: "#fff", border: "none", borderRadius: 8, padding: "6px 10px", fontSize: 12, fontWeight: 700, color: PALETTE.pending, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}
+          >
+            Tentar de novo
+          </button>
         </div>
       )}
       {loaded && saveError && (
